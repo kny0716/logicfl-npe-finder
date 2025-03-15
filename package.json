@@ -14,7 +14,7 @@
   "contributes": {
     "commands": [
       {
-        "command": "logicfl-npe-finder.helloWorld",
+        "command": "logicfl-npe-finder.find",
         "title": "Hello World"
       }
     ]
