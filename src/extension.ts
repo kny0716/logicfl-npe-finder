@@ -30,6 +30,55 @@ function highlightLines(lineNumbers: number[]) {
   editor.setDecorations(decorationType, decorations);
 }
 
+// 웹 패널
+function getWebviewContent(lineNumbers: number[]): string {
+  const listItems = lineNumbers
+    .map(
+      (line) =>
+        `<li><a href="#" onclick="jumpToLine(${line})"> Line ${line}</a></li>`
+    )
+    .join("");
+
+  return `<!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>My Panel</title>
+  </head>
+  <body>
+      <h1>npe 발생 원인으로 추정되는 라인인</h1>
+      <ul>${listItems}</ul>
+      <script>
+          const vscode = acquireVsCodeApi();
+          function jumpToLine(line) {
+              vscode.postMessage({
+                  command: 'jumpToLine',
+                  line: line
+              });
+          }
+      </script>
+  </body>
+  </html>`;
+}
+
+function revealLineInEditor(line: number) {
+  const editors = vscode.window.visibleTextEditors;
+  const editor = editors.find((e) => e.document.languageId === "java");
+  console.log("1");
+  if (!editor) {
+    return;
+  }
+  console.log("2");
+  const position = new vscode.Position(line - 1, 0);
+  const range = new vscode.Range(position, position);
+  editor.revealRange(
+    range,
+    vscode.TextEditorRevealType.InCenterIfOutsideViewport
+  );
+  editor.selection = new vscode.Selection(position, position); // 선택(커서 이동)
+}
+
 export function activate(context: vscode.ExtensionContext) {
   // 문서가 열릴 때마다 logicFL에게 필요한 정보를 보내고 결과 받아와서 하이라이팅해야함.
   // 일단 결과를 받아서 파싱한다음 하이라이팅하는것만 구현
@@ -61,6 +110,26 @@ export function activate(context: vscode.ExtensionContext) {
   }
   console.log(lineNumbers);
   highlightLines(lineNumbers);
+
+  const panel = vscode.window.createWebviewPanel(
+    "myPanel",
+    "My Panel",
+    vscode.ViewColumn.Beside,
+    {
+      enableScripts: true,
+    }
+  );
+  panel.webview.html = getWebviewContent(lineNumbers);
+
+  panel.webview.onDidReceiveMessage(
+    (message) => {
+      if (message.command === "jumpToLine") {
+        revealLineInEditor(message.line);
+      }
+    },
+    undefined,
+    context.subscriptions
+  );
 
   const disposable = vscode.commands.registerCommand(
     "logicfl-npe-finder.find",
