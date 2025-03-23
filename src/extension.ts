@@ -89,6 +89,21 @@ function revealLineInEditor(line: number) {
   editor.selection = new vscode.Selection(position, position); // 선택(커서 이동)
 }
 
+async function getAST(): Promise<any> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return;
+  }
+  const document = editor.document;
+  const text = document.getText();
+  try {
+    const { parse } = await import("java-parser");
+    const ast = parse(text);
+    return ast;
+  } catch (err) {
+    console.error(err);
+  }
+}
 export function activate(context: vscode.ExtensionContext) {
   // 지금은 결과가 이미 있다고 가정 - 원래 순서는 extension 실행 후 분석 결과 받고 result.txt 생성 후 받아와서 하이라이팅함
   const faultLocalizationResults = getResult();
@@ -129,6 +144,12 @@ export function activate(context: vscode.ExtensionContext) {
     undefined,
     context.subscriptions
   );
+
+  const ast = getAST();
+  if (!ast) {
+    console.error("Failed to get AST");
+    return;
+  }
 
   const disposable = vscode.commands.registerCommand(
     "logicfl-npe-finder.find",
