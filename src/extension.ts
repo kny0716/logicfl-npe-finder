@@ -1,16 +1,28 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 
 const decorationType = vscode.window.createTextEditorDecorationType({
   backgroundColor: "rgba(208, 243, 10, 0.3)",
   borderRadius: "5px",
 });
 
+function getResult(): string | undefined {
+  const outputDir = path.join(__dirname, "..", "output");
+  const filePath = path.join(outputDir, "result.txt");
+  try {
+    const faultLocalizationResults = fs.readFileSync(filePath, "utf-8");
+    return faultLocalizationResults;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function highlightLines(lineNumbers: number[]) {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     return;
   }
-
   const decorations: vscode.DecorationOptions[] = [];
 
   lineNumbers.forEach((lineNumber) => {
@@ -65,11 +77,9 @@ function getWebviewContent(lineNumbers: number[]): string {
 function revealLineInEditor(line: number) {
   const editors = vscode.window.visibleTextEditors;
   const editor = editors.find((e) => e.document.languageId === "java");
-  console.log("1");
   if (!editor) {
     return;
   }
-  console.log("2");
   const position = new vscode.Position(line - 1, 0);
   const range = new vscode.Range(position, position);
   editor.revealRange(
@@ -80,23 +90,12 @@ function revealLineInEditor(line: number) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  // 문서가 열릴 때마다 logicFL에게 필요한 정보를 보내고 결과 받아와서 하이라이팅해야함.
-  // 일단 결과를 받아서 파싱한다음 하이라이팅하는것만 구현
-  // 이 extension이 실행되는 시점이 (1) 입력되고 있을 때? (2) 저장할 때? (3) 파일을 열 때? (4) 에디터 active될 때? 등이 중요할 듯
-
-  // Fault Localization 결과 (예제 데이터, 실제로는 logicFL에서 받아와야 함)
-  const faultLocalizationResults = `
-        NPE at line(type_utils_1, 805) / Null Expression - v_raw_component_type_1201[rawComponentType]
-                 can be caused by
-        v_raw_component_type_1201[rawComponentType] - line(type_utils_1, 8).
-
-        NPE at line(type_utils_1, 805) / Null Expression - v_raw_component_type_1201[rawComponentType]
-                 can be caused by
-        type_utils_1_literal3[null] - line(type_utils_1, 10).
-
-        NPE at line(type_utils_1, 805) / Null Expression - v_raw_component_type_1201[rawComponentType]
-                 can be caused by
-        type_utils_1_expr28['getRawType(((GenericArrayType)type).getGenericComponentType(),assigningType)'] - line(type_utils_1, 18).`;
+  // 지금은 결과가 이미 있다고 가정 - 원래 순서는 extension 실행 후 분석 결과 받고 result.txt 생성 후 받아와서 하이라이팅함
+  const faultLocalizationResults = getResult();
+  if (!faultLocalizationResults) {
+    console.error("Failed to get results");
+    return;
+  }
 
   // 정규식을 사용하여 "can be caused by" 이후의 NPE가 발생하는 라인 번호만 추출
   const lineNumbers: number[] = [];
@@ -108,7 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
       lineNumbers.push(lineNumber);
     }
   }
-  console.log(lineNumbers);
+
   highlightLines(lineNumbers);
 
   const panel = vscode.window.createWebviewPanel(
