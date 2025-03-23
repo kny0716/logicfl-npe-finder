@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import { PrologFactsHandler } from "./ast-to-facts.js";
 
 const decorationType = vscode.window.createTextEditorDecorationType({
   backgroundColor: "rgba(208, 243, 10, 0.3)",
@@ -104,6 +105,23 @@ async function getAST(): Promise<any> {
     console.error(err);
   }
 }
+
+function getFacts(ast: any) {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return;
+  }
+  const handler = new PrologFactsHandler();
+  handler
+    .processAST(ast, editor.document.getText())
+    .then((facts) => {
+      console.log(facts);
+    })
+    .catch((err) => {
+      console.error(err);
+    });
+}
+
 export function activate(context: vscode.ExtensionContext) {
   // 지금은 결과가 이미 있다고 가정 - 원래 순서는 extension 실행 후 분석 결과 받고 result.txt 생성 후 받아와서 하이라이팅함
   const faultLocalizationResults = getResult();
@@ -111,6 +129,10 @@ export function activate(context: vscode.ExtensionContext) {
     console.error("Failed to get results");
     return;
   }
+  // const editor = vscode.window.activeTextEditor;
+  // if (!editor) {
+  //   return;
+  // }
 
   // 정규식을 사용하여 "can be caused by" 이후의 NPE가 발생하는 라인 번호만 추출
   const lineNumbers: number[] = [];
@@ -150,6 +172,8 @@ export function activate(context: vscode.ExtensionContext) {
     console.error("Failed to get AST");
     return;
   }
+
+  getFacts(ast);
 
   const disposable = vscode.commands.registerCommand(
     "logicfl-npe-finder.find",
