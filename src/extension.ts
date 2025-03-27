@@ -60,7 +60,7 @@ function getWebviewContent(lineNumbers: number[]): string {
       <title>My Panel</title>
   </head>
   <body>
-      <h1>npe 발생 원인으로 추정되는 라인인</h1>
+      <h1>npe 발생 원인으로 추정되는 라인</h1>
       <ul>${listItems}</ul>
       <script>
           const vscode = acquireVsCodeApi();
@@ -115,24 +115,20 @@ function getFacts(ast: any) {
   handler
     .processAST(ast, editor.document.getText())
     .then((facts) => {
-      console.log(facts);
+      fs.writeFileSync(path.join(__dirname, "..", "output", "facts.pl"), facts);
     })
     .catch((err) => {
       console.error(err);
     });
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   // 지금은 결과가 이미 있다고 가정 - 원래 순서는 extension 실행 후 분석 결과 받고 result.txt 생성 후 받아와서 하이라이팅함
   const faultLocalizationResults = getResult();
   if (!faultLocalizationResults) {
     console.error("Failed to get results");
     return;
   }
-  // const editor = vscode.window.activeTextEditor;
-  // if (!editor) {
-  //   return;
-  // }
 
   // 정규식을 사용하여 "can be caused by" 이후의 NPE가 발생하는 라인 번호만 추출
   const lineNumbers: number[] = [];
@@ -167,12 +163,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions
   );
 
-  const ast = getAST();
-  if (!ast) {
-    console.error("Failed to get AST");
-    return;
-  }
-
+  const ast = await getAST();
   getFacts(ast);
 
   const disposable = vscode.commands.registerCommand(

@@ -1,3 +1,8 @@
+import { json } from "stream/consumers";
+import * as fs from "fs";
+import * as path from "path";
+import util from "util";
+
 interface Range {
   start: number;
   end: number;
@@ -12,6 +17,19 @@ interface JavaASTNode {
   nodeType: string;
   range?: Range;
   children?: JavaASTNode[];
+}
+
+function astToTxt(compilationUnit: any) {
+  //ast구조 파악을 위해 임시로 txt로 출력
+  const filePath = path.join(__dirname, "..", "output", "ast.txt");
+  try {
+    fs.writeFileSync(
+      filePath,
+      util.inspect(compilationUnit, { depth: null, colors: false })
+    );
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 // Unique ID generator for Prolog facts
@@ -35,7 +53,6 @@ export class PrologFactsHandler {
 
     // Process the compilation unit
     await this.processCompilationUnit(ast);
-
     return this.facts.join("\n");
   }
 
@@ -57,6 +74,15 @@ export class PrologFactsHandler {
 
   private async processCompilationUnit(compilationUnit: any): Promise<void> {
     // Process package declaration if it exists
+    // console.log(JSON.stringify(compilationUnit));
+    // console.log(compilationUnit);
+    // console.log(compilationUnit.children);
+    // console.log(compilationUnit.children.ordinaryCompilationUnit);
+    // console.log(compilationUnit.children.ordinaryCompilationUnit[0]);
+    // console.log(compilationUnit.children.ordinaryCompilationUnit[0].children); //undefined
+
+    // astToTxt(compilationUnit);
+
     if (compilationUnit.package) {
       await this.processPackage(compilationUnit.package);
     }
