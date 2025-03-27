@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import { PrologFactsHandler } from "./ast-to-facts.js";
 
 const decorationType = vscode.window.createTextEditorDecorationType({
   backgroundColor: "rgba(208, 243, 10, 0.3)",
@@ -59,7 +60,7 @@ function getWebviewContent(lineNumbers: number[]): string {
       <title>My Panel</title>
   </head>
   <body>
-      <h1>npe 발생 원인으로 추정되는 라인인</h1>
+      <h1>npe 발생 원인으로 추정되는 라인</h1>
       <ul>${listItems}</ul>
       <script>
           const vscode = acquireVsCodeApi();
@@ -89,7 +90,39 @@ function revealLineInEditor(line: number) {
   editor.selection = new vscode.Selection(position, position); // 선택(커서 이동)
 }
 
-export function activate(context: vscode.ExtensionContext) {
+async function getAST(): Promise<any> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return;
+  }
+  const document = editor.document;
+  const text = document.getText();
+  try {
+    const { parse } = await import("java-parser");
+    const ast = parse(text);
+    return ast;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function getFacts(ast: any) {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return;
+  }
+  const handler = new PrologFactsHandler();
+  handler
+    .processAST(ast, editor.document.getText())
+    .then((facts) => {
+      fs.writeFileSync(path.join(__dirname, "..", "output", "facts.pl"), facts);
+    })
+    .catch((err) => {
+      console.error(err);
+    });
+}
+
+export async function activate(context: vscode.ExtensionContext) {
   // 지금은 결과가 이미 있다고 가정 - 원래 순서는 extension 실행 후 분석 결과 받고 result.txt 생성 후 받아와서 하이라이팅함
   const faultLocalizationResults = getResult();
   if (!faultLocalizationResults) {
@@ -129,6 +162,9 @@ export function activate(context: vscode.ExtensionContext) {
     undefined,
     context.subscriptions
   );
+
+  const ast = await getAST();
+  getFacts(ast);
 
   const disposable = vscode.commands.registerCommand(
     "logicfl-npe-finder.find",
