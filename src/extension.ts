@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
+import * as cp from "child_process";
 import { PrologFactsHandler } from "./ast-to-facts.js";
 
 const decorationType = vscode.window.createTextEditorDecorationType({
@@ -121,6 +123,166 @@ function getFacts(ast: any) {
       console.error(err);
     });
 }
+// maven 프로젝트 생성, 코드 복사, 빌드, 테스트 실행
+function runTest(context: vscode.ExtensionContext) {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return;
+  }
+
+  // Maven 프로젝트를 생성할 디렉토리 결정
+  const mavenProjectPath = context.globalStorageUri.fsPath;
+  if (!fs.existsSync(mavenProjectPath)) {
+    fs.mkdirSync(mavenProjectPath, { recursive: true });
+  }
+
+  // 기본 Maven 프로젝트 파일 준비 (pom.xml)
+  const pomPath = path.join(mavenProjectPath, "pom.xml");
+  if (!fs.existsSync(pomPath)) {
+    const pomContent = `
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>test-project</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <dependencies>
+        <!-- JUnit 5 의존성 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.8.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <!-- Maven Surefire Plugin: 테스트 실행 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M5</version>
+            </plugin>
+            <!-- JaCoCo Maven Plugin: 코드 커버리지 -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.8</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+    <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+</project>
+            `;
+    fs.writeFileSync(pomPath, pomContent);
+  }
+
+  // src/main/java 와 src/test/java 폴더 생성
+  const srcMainDir = path.join(mavenProjectPath, "src", "main", "java");
+  const srcTestDir = path.join(mavenProjectPath, "src", "test", "java");
+  [srcMainDir, srcTestDir].forEach((dir) => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
+
+  // 현재 열려있는 자바 파일을 src/main/java에 복사
+  const sourceFilePath = editor.document.fileName;
+  const fileName = path.basename(sourceFilePath);
+  const targetFilePath = path.join(srcMainDir, fileName);
+  fs.copyFile(sourceFilePath, targetFilePath, (err) => {
+    if (err) {
+      vscode.window.showErrorMessage("파일 복사 실패: " + err.message);
+      return;
+    }
+    vscode.window.showInformationMessage(
+      `자바 파일이 Maven 프로젝트로 복사됨: ${targetFilePath}`
+    );
+  });
+
+  // 테스트 클래스 생성 (npe가 발생하는지)
+  const testClassPath = path.join(
+    mavenProjectPath,
+    "src",
+    "test",
+    "java",
+    fileName.replace(".java", "Test.java")
+  );
+  const testClassContent = `
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.Test;
+
+public class ${fileName.replace(".java", "Test")} {
+    
+    @Test
+    public void testNullPointerException() {
+        ${fileName.replace(".java", "")} sample = new ${fileName.replace(
+    ".java",
+    ""
+  )}();
+        
+        assertThrows(NullPointerException.class, () -> {
+            sample.run();
+        });
+    }
+}
+`; // 이걸 수정해야하는 데, npe할 만한 메소드를 가져와야 함 (code coverage가 unit test에서 하는건가 아니면 전체인가?)
+
+  fs.writeFileSync(testClassPath, testClassContent);
+  vscode.window.showInformationMessage(
+    `테스트 클래스가 생성됨: ${testClassPath}`
+  );
+
+  // Maven 테스트 실행 (NPE 테스트와 코드 커버리지 리포트 생성)
+  const mvnCommand = `mvn clean test`;
+  cp.exec(mvnCommand, { cwd: mavenProjectPath }, (error, stdout, stderr) => {
+    if (error) {
+      vscode.window.showErrorMessage(
+        "Maven 테스트 실행 오류: " + error.message
+      );
+      return;
+    }
+    vscode.window.showInformationMessage(
+      "Maven 테스트와 코드 커버리지 추출 완료."
+    );
+    // 필요시, stdout이나 stderr 결과를 출력 창에 기록
+    console.log(stdout);
+    console.log(stderr);
+
+    // 커버리지 리포트는 기본적으로 target/site/jacoco 폴더에 생성됨
+    const reportPath = path.join(
+      mavenProjectPath,
+      "target",
+      "site",
+      "jacoco",
+      "index.html"
+    );
+    vscode.window.showInformationMessage(
+      `코드 커버리지 리포트를 확인하세요: ${reportPath}`
+    );
+  });
+}
 
 export async function activate(context: vscode.ExtensionContext) {
   // 지금은 결과가 이미 있다고 가정 - 원래 순서는 extension 실행 후 분석 결과 받고 result.txt 생성 후 받아와서 하이라이팅함
@@ -163,8 +325,9 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions
   );
 
-  const ast = await getAST();
-  getFacts(ast);
+  // const ast = await getAST();
+  // getFacts(ast);
+  runTest(context);
 
   const disposable = vscode.commands.registerCommand(
     "logicfl-npe-finder.find",
