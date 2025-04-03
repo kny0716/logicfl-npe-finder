@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as cp from "child_process";
+import { XMLParser } from "fast-xml-parser";
 import { PrologFactsHandler } from "./ast-to-facts.js";
 
 const decorationType = vscode.window.createTextEditorDecorationType({
@@ -257,6 +258,7 @@ public class ${fileName.replace(".java", "Test")} {
   // Maven 테스트 실행 (NPE 테스트와 코드 커버리지 리포트 생성)
   const mvnCommand = `mvn clean test`;
   cp.exec(mvnCommand, { cwd: mavenProjectPath }, (error, stdout, stderr) => {
+    console.log(error);
     if (error) {
       vscode.window.showErrorMessage(
         "Maven 테스트 실행 오류: " + error.message
@@ -266,9 +268,149 @@ public class ${fileName.replace(".java", "Test")} {
     vscode.window.showInformationMessage(
       "Maven 테스트와 코드 커버리지 추출 완료."
     );
-    // 필요시, stdout이나 stderr 결과를 출력 창에 기록
-    console.log(stdout);
-    console.log(stderr);
+
+    const testReportPath = path.join(
+      mavenProjectPath,
+      "target",
+      "surefire-reports"
+    );
+    const coverageReportPath = path.join(
+      mavenProjectPath,
+      "target",
+      "site",
+      "jacoco",
+      "jacoco.xml"
+    );
+
+    // test정보와 code coverage가 저장될 디렉토리
+    const resourcePath = path.join(__dirname, "..", "resources");
+
+    // surefire-reports에서 test.(java프로젝트이름).json 파일 생성 및 저장
+    const testResults: {
+      "passed.classes": string[];
+      "failed.classes": string[];
+      "failed.tests": Array<{ class: string; name: string; message: string }>;
+    } = { "passed.classes": [], "failed.classes": [], "failed.tests": [] };
+
+    fs.readdirSync(testReportPath).forEach((file) => {
+      if (file.endsWith(".xml")) {
+        const xml = fs.readFileSync(path.join(testReportPath, file), "utf-8");
+        const parser = new XMLParser({ ignoreAttributes: false });
+        const jsonObj = parser.parse(xml);
+
+        if (jsonObj.testsuite && jsonObj.testsuite.testcase) {
+          const testCases = jsonObj.testsuite.testcase;
+          for (const testCase of Array.isArray(testCases)
+            ? testCases
+            : [testCases]) {
+            const testName = testCase["@_name"];
+            const className = testCase["@_classname"];
+            const failure = testCase.failure;
+
+            if (testName && className) {
+              if (failure) {
+                testResults["failed.classes"].push(className);
+                testResults["failed.tests"].push({
+                  class: className,
+                  name: testName,
+                  message: failure["@_message"] || "Unknown Failure",
+                });
+              } else {
+                testResults["passed.classes"].push(className);
+              }
+            }
+          }
+        }
+
+        // const testCases = xmlDoc.getElementsByTagName("testcase");
+        // for (let i = 0; i < testCases.length; i++) {
+        //   const testCase = testCases[i];
+        //   const testName = testCase.getAttribute("name");
+        //   const className = testCase.getAttribute("classname");
+        //   const failureElement = testCase.getElementsByTagName("failure")[0];
+        //   if (testName && className) {
+        //     if (failureElement) {
+        //       const failureMessage =
+        //         failureElement.getAttribute("message") ||
+        //         failureElement.textContent ||
+        //         "Unknown Failure";
+        //       testResults["failed.classes"].push(className);
+        //       testResults["failed.tests"].push({
+        //         class: className,
+        //         name: testName,
+        //         message: failureMessage,
+        //       });
+        //     } else {
+        //       testResults["passed.classes"].push(className);
+        //     }
+        //   }
+        // }
+      }
+    });
+
+    fs.writeFileSync(
+      path.join(resourcePath, `tests.${fileName.replace(".java", "")}.json`),
+      JSON.stringify(testResults, null, 2)
+    );
+
+    // jacoco.xml에서 (java프로젝트이름).coverage.json 파일 생성 및 저장
+    const coverageData: {
+      coverage: { className: string; covered: number[] }[];
+      classes: string[];
+    } = { coverage: [], classes: [] };
+
+    fs.readFile(coverageReportPath, "utf-8", (err, xml) => {
+      if (!err) {
+        const parser = new XMLParser({ ignoreAttributes: false });
+        const xmlDoc = parser.parse(xml);
+
+        const packageData = xmlDoc.report.package;
+        if (!packageData) {
+          console.error("올바른 데이터 구조가 아닙니다.");
+        } else {
+          const classes = Array.isArray(xmlDoc.report.package.class)
+            ? xmlDoc.report.package.class
+            : [xmlDoc.report.package.class];
+          const fileList = Array.isArray(packageData.sourcefile)
+            ? packageData.sourcefile
+            : [packageData.sourcefile];
+          const coveredLines: number[] = [];
+          classes.forEach((cls: any) => {
+            const className = cls["@_name"] || "";
+
+            fileList.forEach((file: any) => {
+              const lines = file.line;
+              if (Array.isArray(lines)) {
+                lines.forEach((line: any) => {
+                  const lineNumber = parseInt(line["@_nr"], 10);
+                  const covered = parseInt(line["@_ci"], 10);
+                  if (!isNaN(lineNumber) && !isNaN(covered) && covered > 0) {
+                    coveredLines.push(lineNumber);
+                  }
+                });
+              }
+            });
+            coverageData.coverage.push({ className, covered: coveredLines });
+            coverageData.classes.push(className);
+          });
+        }
+
+        fs.writeFileSync(
+          path.join(
+            resourcePath,
+            `${fileName.replace(".java", "")}.coverage.json`
+          ),
+          JSON.stringify(coverageData, null, 2)
+        );
+        vscode.window.showInformationMessage(
+          "테스트 및 코드 커버리지 파일 저장 완료."
+        );
+      }
+    });
+
+    // stacktrace.log 파일 저장
+    const stacktracePath = path.join(resourcePath, "stacktrace.log");
+    fs.writeFileSync(stacktracePath, stderr || stdout);
 
     // 커버리지 리포트는 기본적으로 target/site/jacoco 폴더에 생성됨
     const reportPath = path.join(
