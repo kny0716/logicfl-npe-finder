@@ -136,19 +136,22 @@ function getTestResult() {
     return;
   }
 
+  //gradle 프로젝트의 경우
   const userProjectPath = workspaceFolders[0].uri.fsPath;
   console.log("userproject" + userProjectPath);
   const testReportPath = path.join(
     userProjectPath,
-    "target",
-    "surefire-reports"
+    "build",
+    "test-results",
+    "test"
   );
   const coverageReportPath = path.join(
     userProjectPath,
-    "target",
-    "site",
+    "build",
+    "reports",
     "jacoco",
-    "jacoco.xml"
+    "test",
+    "jacocoTestReport.xml"
   );
 
   const sourceFilePath = editor.document.fileName;
@@ -157,7 +160,7 @@ function getTestResult() {
   // test정보와 code coverage가 저장될 디렉토리
   const resourcePath = path.join(__dirname, "..", "resources");
 
-  // surefire-reports에서 test.(java프로젝트이름).json 파일 생성 및 저장
+  // test-results 에서 test.(java프로젝트이름).json 파일 생성 및 저장
   const testResults: {
     "passed.classes": string[];
     "failed.classes": string[];
@@ -201,7 +204,7 @@ function getTestResult() {
     JSON.stringify(testResults, null, 2)
   );
 
-  // jacoco.xml에서 (java프로젝트이름).coverage.json 파일 생성 및 저장
+  // jacocoTestReport.xml에서 (java프로젝트이름).coverage.json 파일 생성 및 저장
   const coverageData: {
     coverage: { className: string; covered: number[] }[];
     classes: string[];
