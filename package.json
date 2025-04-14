@@ -12,12 +12,77 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "LogicFL Configuration",
+      "properties": {
+        "logicfl.junitVersion": {
+          "type": "string",
+          "enum": [
+            "junit4",
+            "junit5"
+          ],
+          "default": "junit5",
+          "description": "Version of JUnit to use for running tests"
+        },
+        "logicfl.targetPrefix": {
+          "type": "string",
+          "default": "sample",
+          "description": "Prefix of packages which include target classes"
+        },
+        "logicfl.monitorTarget": {
+          "type": "string",
+          "enum": [
+            "coverage",
+            "trace"
+          ],
+          "default": "coverage",
+          "description": "Whether DynamicAnalyzer monitors coverage or trace lines"
+        },
+        "logicfl.monitorValue": {
+          "type": "string",
+          "enum": [
+            "null_only",
+            "null_boolean"
+          ],
+          "default": "null_only",
+          "description": "Monitor values for null only, or null and boolean"
+        },
+        "logicfl.monitorMethod": {
+          "type": "string",
+          "enum": [
+            "all_visible",
+            "target_only"
+          ],
+          "default": "all_visible",
+          "description": "Which variables to monitor: all visible or only target"
+        },
+        "logicfl.coveredOnly": {
+          "type": "boolean",
+          "default": true,
+          "description": "StaticAnalyzer only adds predicates for covered parts of code"
+        },
+        "logicfl.debugInfo": {
+          "type": "boolean",
+          "default": true,
+          "description": "Print additional debugging info during analysis"
+        }
+      }
+    },
     "commands": [
       {
-        "command": "logicfl-npe-finder.find",
-        "title": "Hello World"
+        "command": "logicfl.analyzeTestInfo",
+        "title": "Analyze Test Info using LogicFL"
       }
-    ]
+    ],
+    "menus": {
+      "testing/item/context": [
+        {
+          "command": "logicfl.analyzeTestInfo",
+          "when": "true",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
