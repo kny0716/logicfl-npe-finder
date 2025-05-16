@@ -1,80 +1,66 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
-import * as cp from "child_process";
 import { analyzeTestInfoFromTestItem } from "./logicflTestAnalyzer";
+import { generateConfigurationArgs } from "./generateConfiguration";
+import { runAnalyzer } from "./runAnalyzer";
+import { highlightLines } from "./highlightResult";
+import { showWebview } from "./showWebview";
 
-const decorationType = vscode.window.createTextEditorDecorationType({
-  backgroundColor: "rgba(208, 243, 10, 0.3)",
-  borderRadius: "5px",
-});
+async function getResult(
+  testItem: vscode.TestItem,
+  context: vscode.ExtensionContext
+): Promise<number[] | undefined> {
+  const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+  let className = fqcn.split(".").pop() ?? fqcn;
+  className = className.replace(/Test$/i, "");
 
-function getResult(): string | undefined {
-  const outputDir = path.join(__dirname, "..", "output");
-  const filePath = path.join(outputDir, "result.txt");
+  const outputDir = path.join(context.extensionPath, "result", className);
+  const filePath = path.join(outputDir, "fault_locs.txt");
   try {
-    const faultLocalizationResults = fs.readFileSync(filePath, "utf-8");
-    return faultLocalizationResults;
+    const content = await fs.readFileSync(filePath, "utf-8");
+    const lines = content.split(/\r?\n/);
+    const lineNumbers: number[] = [];
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      const lineNum = parseInt(parts[1], 10);
+      if (!isNaN(lineNum)) {
+        lineNumbers.push(lineNum);
+      }
+    }
+    console.log(`결과를 찾았습니다: ${lineNumbers}`);
+    return lineNumbers.sort((a, b) => a - b);
   } catch (err) {
     console.error(err);
+    return undefined;
   }
 }
 
-function highlightLines(lineNumbers: number[]) {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    return;
+async function openJavaFile(
+  testItem: vscode.TestItem
+): Promise<vscode.TextDocument | undefined> {
+  const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+  const parts = fqcn.split(".");
+  const testName = parts.pop()!;
+  const ClassName = testName.replace(/test/i, "");
+  const filePath = path.join(
+    vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
+    "src",
+    "main",
+    "java",
+    ...parts,
+    ClassName + ".java"
+  );
+
+  if (fs.existsSync(filePath)) {
+    const document = await vscode.workspace.openTextDocument(filePath);
+    await vscode.window.showTextDocument(document);
+    console.log(`파일을 열었습니다: ${filePath}`);
+    return document;
+  } else {
+    console.log(`파일을 찾을 수 없습니다: ${filePath}`);
+    return undefined;
   }
-  const decorations: vscode.DecorationOptions[] = [];
-
-  lineNumbers.forEach((lineNumber) => {
-    const line = editor.document.lineAt(lineNumber - 1);
-    const start = line.text.search(/\S/);
-    if (start === -1) {
-      return;
-    }
-    const startpos = new vscode.Position(lineNumber - 1, start);
-    const range = new vscode.Range(startpos, line.range.end);
-    const decoration = {
-      range: range,
-      hoverMessage: "NPE 발생의 원인으로 추정됨",
-    };
-    decorations.push(decoration);
-  });
-  editor.setDecorations(decorationType, decorations);
-}
-
-// 웹 패널
-function getWebviewContent(lineNumbers: number[]): string {
-  const listItems = lineNumbers
-    .map(
-      (line) =>
-        `<li><a href="#" onclick="jumpToLine(${line})"> Line ${line}</a></li>`
-    )
-    .join("");
-
-  return `<!DOCTYPE html>
-  <html lang="en">
-  <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>My Panel</title>
-  </head>
-  <body>
-      <h1>npe 발생 원인으로 추정되는 라인</h1>
-      <ul>${listItems}</ul>
-      <script>
-          const vscode = acquireVsCodeApi();
-          function jumpToLine(line) {
-              vscode.postMessage({
-                  command: 'jumpToLine',
-                  line: line
-              });
-          }
-      </script>
-  </body>
-  </html>`;
 }
 
 function revealLineInEditor(line: number) {
@@ -89,61 +75,55 @@ function revealLineInEditor(line: number) {
     range,
     vscode.TextEditorRevealType.InCenterIfOutsideViewport
   );
-  editor.selection = new vscode.Selection(position, position); // 선택(커서 이동)
+  editor.selection = new vscode.Selection(position, position);
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-  // 지금은 결과가 이미 있다고 가정 - 원래 순서는 extension 실행 후 분석 결과 받고 result.txt 생성 후 받아와서 하이라이팅함
-
   const disposable = vscode.commands.registerCommand(
     "logicfl.analyzeTestInfo",
     async (testItem: vscode.TestItem) => {
       if (!testItem) {
-        vscode.window.showErrorMessage("No test item selected.");
+        vscode.window.showErrorMessage("No test item selected");
         return;
       }
-      await analyzeTestInfoFromTestItem(testItem);
+      try {
+        const isfailedTest = await analyzeTestInfoFromTestItem(
+          testItem,
+          context
+        );
+        if (!isfailedTest) {
+          return;
+        }
+        generateConfigurationArgs(
+          testItem,
+          vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
+          context
+        );
+        await runAnalyzer(testItem, context, "CoverageAnalyzer");
+        await runAnalyzer(testItem, context, "StaticAnalyzer");
+        await runAnalyzer(testItem, context, "DynamicAnalyzer");
+        await runAnalyzer(testItem, context, "FaultLocalizer");
+
+        try {
+          const faultLocalizationResults = await getResult(testItem, context);
+          if (!faultLocalizationResults) {
+            console.error("Failed to get results");
+            return;
+          }
+          const document = await openJavaFile(testItem);
+          if (document) {
+            highlightLines(faultLocalizationResults);
+            showWebview(context, faultLocalizationResults, revealLineInEditor);
+          }
+        } catch (error) {
+          console.log("Error in getResult: " + error);
+        }
+      } catch (error) {
+        console.log("Error in analyzeTestInfo: " + error);
+      }
     }
   );
   context.subscriptions.push(disposable);
-  // const faultLocalizationResults = getResult();
-  // if (!faultLocalizationResults) {
-  //   console.error("Failed to get results");
-  //   return;
-  // }
-
-  // // 정규식을 사용하여 "can be caused by" 이후의 NPE가 발생하는 라인 번호만 추출
-  // const lineNumbers: number[] = [];
-  // const regex = /can be caused by[\s\S]*?line\(\w+, (\d+)\)/g;
-  // let match;
-  // while ((match = regex.exec(faultLocalizationResults)) !== null) {
-  //   const lineNumber = parseInt(match[1], 10);
-  //   if (!isNaN(lineNumber)) {
-  //     lineNumbers.push(lineNumber);
-  //   }
-  // }
-
-  // highlightLines(lineNumbers);
-
-  // const panel = vscode.window.createWebviewPanel(
-  //   "myPanel",
-  //   "My Panel",
-  //   vscode.ViewColumn.Beside,
-  //   {
-  //     enableScripts: true,
-  //   }
-  // );
-  // panel.webview.html = getWebviewContent(lineNumbers);
-
-  // panel.webview.onDidReceiveMessage(
-  //   (message) => {
-  //     if (message.command === "jumpToLine") {
-  //       revealLineInEditor(message.line);
-  //     }
-  //   },
-  //   undefined,
-  //   context.subscriptions
-  // );
 }
 
 // This method is called when your extension is deactivated

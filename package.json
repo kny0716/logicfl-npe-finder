@@ -71,7 +71,7 @@
     "commands": [
       {
         "command": "logicfl.analyzeTestInfo",
-        "title": "Analyze Test Info using LogicFL"
+        "title": "LogicFL 실행"
       }
     ],
     "menus": {
