@@ -70,14 +70,14 @@
     },
     "commands": [
       {
-        "command": "logicfl.analyzeTestInfo",
-        "title": "Analyze Test Info using LogicFL"
+        "command": "logicfl.startAnalysis",
+        "title": "Start Analysis using LogicFL"
       }
     ],
     "menus": {
       "testing/item/context": [
         {
-          "command": "logicfl.analyzeTestInfo",
+          "command": "logicfl.startAnalysis",
           "when": "true",
           "group": "navigation"
         }

@@ -5,31 +5,50 @@ import * as path from "path";
 import * as cp from "child_process";
 import { XMLParser } from "fast-xml-parser";
 
-export async function analyzeTestInfoFromTestItem(testItem: vscode.TestItem) {
+export async function analyzeTestInfoFromTestItem(
+  testItem: vscode.TestItem,
+  context: vscode.ExtensionContext
+): Promise<boolean> {
   const workspacePath = vscode.workspace.workspaceFolders?.[0].uri.fsPath!;
   const target = extractGradleTestTarget(testItem);
-  const className = testItem.id.replace(/^.*@/, "").replace(/#.*$/, "");
+  const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+  const testName = fqcn.split(".").pop() ?? fqcn;
+
+  const className = testName.replace(/Test$/i, "");
+  const outputDir = path.join(context.extensionPath, "result", className);
+  fs.mkdirSync(outputDir, { recursive: true });
 
   try {
     await runGradleTestOnly(workspacePath, target);
 
     const resultDir = path.join(workspacePath, "build", "test-results", "test");
-    const testsInfoPath = path.join(workspacePath, "src/test/resources");
 
-    await parseJUnitResultsAndWriteTestInfo(
-      resultDir,
-      testsInfoPath,
-      className
-    );
+    await parseJUnitResultsAndWriteTestInfo(resultDir, outputDir);
+
+    const resultFile = path.join(outputDir, `tests.${testName}.json`);
+    const resultJson = JSON.parse(fs.readFileSync(resultFile, "utf-8"));
+
+    if (
+      resultJson["failed.classes"].length === 0 &&
+      resultJson["failed.tests"].length === 0
+    ) {
+      console.log("실패한 테스트가 없습니다.");
+      vscode.window.showWarningMessage("실패한 테스트가 없습니다.");
+      return false;
+    }
+
     vscode.window.showInformationMessage("tests.json 생성 완료!");
-    console.log("tests.json 생성 완료!");
+    console.log("tests.json 생성 완료");
+    return true;
   } catch (err: any) {
     vscode.window.showErrorMessage("테스트 분석 실패: " + err.message);
     console.error("테스트 분석 실패:", err.message);
+    return false;
   }
 }
 
 function extractGradleTestTarget(testItem: vscode.TestItem): string {
+  console.log(testItem.id);
   const className = testItem.id.split("@").pop()?.split("#")[0] ?? "";
   const methodName = testItem.id.includes("#")
     ? testItem.id.split("#")[1].replace(/\(\)$/, "")
@@ -69,14 +88,14 @@ async function runGradleTestOnly(
 
 async function parseJUnitResultsAndWriteTestInfo(
   resultDir: string,
-  outputPath: string,
-  className: string
+  outputPath: string
 ) {
   const testResults: {
     "passed.classes": string[];
     "failed.classes": string[];
     "failed.tests": Array<{ class: string; name: string; message: string }>;
   } = { "passed.classes": [], "failed.classes": [], "failed.tests": [] };
+  let classNameTag: string | undefined = undefined;
 
   fs.readdirSync(resultDir).forEach((file) => {
     if (file.endsWith(".xml")) {
@@ -91,8 +110,9 @@ async function parseJUnitResultsAndWriteTestInfo(
         for (const testCase of Array.isArray(testCases)
           ? testCases
           : [testCases]) {
-          const testName = testCase["@_name"];
+          const testName = testCase["@_name"].replace(/\(\)$/, "");
           const className = testCase["@_classname"];
+          classNameTag = className.split(".").pop() ?? className;
           const failure = testCase.failure;
           const error = testCase.error;
 
@@ -132,8 +152,14 @@ async function parseJUnitResultsAndWriteTestInfo(
   });
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  console.log(
+    `Writing test results to ${path.join(
+      outputPath,
+      `tests.${classNameTag}.json`
+    )}`
+  );
   fs.writeFileSync(
-    path.join(outputPath, `tests.${className}.json`),
+    path.join(outputPath, `tests.${classNameTag}.json`),
     JSON.stringify(testResults, null, 2)
   );
 }
