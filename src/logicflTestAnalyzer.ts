@@ -48,6 +48,7 @@ export async function analyzeTestInfoFromTestItem(
 }
 
 function extractGradleTestTarget(testItem: vscode.TestItem): string {
+  console.log(testItem.id);
   const className = testItem.id.split("@").pop()?.split("#")[0] ?? "";
   const methodName = testItem.id.includes("#")
     ? testItem.id.split("#")[1].replace(/\(\)$/, "")

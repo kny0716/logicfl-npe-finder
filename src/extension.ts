@@ -80,10 +80,16 @@ function revealLineInEditor(line: number) {
 
 export async function activate(context: vscode.ExtensionContext) {
   const disposable = vscode.commands.registerCommand(
-    "logicfl.analyzeTestInfo",
+    "logicfl.startAnalysis",
     async (testItem: vscode.TestItem) => {
       if (!testItem) {
         vscode.window.showErrorMessage("No test item selected");
+        return;
+      }
+      if (testItem.children.size !== 0) {
+        vscode.window.showErrorMessage(
+          "테스트 클래스 파일에서는 실행이 불가능합니다. 메서드를 선택해주세요."
+        );
         return;
       }
       try {
