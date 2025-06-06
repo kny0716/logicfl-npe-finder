@@ -1,9 +1,10 @@
 import * as cp from "child_process";
 import * as path from "path";
 import * as vscode from "vscode";
+import { LogicFLItem } from "./models/logicFLItem";
 
 export function runAnalyzer(
-  testItem: vscode.TestItem,
+  testItem: LogicFLItem,
   context: vscode.ExtensionContext,
   analyzerName:
     | "CoverageAnalyzer"
@@ -12,7 +13,7 @@ export function runAnalyzer(
     | "FaultLocalizer"
 ) {
   return new Promise<void>((resolve, reject) => {
-    const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+    const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
     let className = fqcn.split(".").pop() ?? fqcn;
     className = className.replace(/Test$/i, "");
 

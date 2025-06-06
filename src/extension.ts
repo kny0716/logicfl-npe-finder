@@ -1,17 +1,20 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import { analyzeTestInfoFromTestItem } from "./logicflTestAnalyzer";
 import { generateConfigurationArgs } from "./generateConfiguration";
 import { runAnalyzer } from "./runAnalyzer";
 import { highlightLines } from "./highlightResult";
 import { showWebview } from "./showWebview";
+import { generateTestInfo } from "./generateTestInfo";
+import { runTest } from "./runTest";
+import { LogicFLTreeViewProvider } from "./views/logicFLTreeView";
+import { LogicFLItem } from "./models/logicFLItem";
 
 async function getResult(
-  testItem: vscode.TestItem,
+  testItem: LogicFLItem,
   context: vscode.ExtensionContext
 ): Promise<number[] | undefined> {
-  const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+  const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
   let className = fqcn.split(".").pop() ?? fqcn;
   className = className.replace(/Test$/i, "");
 
@@ -37,9 +40,9 @@ async function getResult(
 }
 
 async function openJavaFile(
-  testItem: vscode.TestItem
+  testItem: LogicFLItem
 ): Promise<vscode.TextDocument | undefined> {
-  const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+  const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
   const parts = fqcn.split(".");
   const testName = parts.pop()!;
   const ClassName = testName.replace(/test/i, "");
@@ -79,51 +82,127 @@ function revealLineInEditor(line: number) {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+  const controller = vscode.tests.createTestController(
+    "logicfl",
+    "LogicFL Tests"
+  );
+  context.subscriptions.push(controller);
+
+  const logicFLTreeViewProvider = new LogicFLTreeViewProvider();
+  vscode.window.registerTreeDataProvider(
+    "logicfl.treeView",
+    logicFLTreeViewProvider
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("logicfl.treeView.refresh", () => {
+      logicFLTreeViewProvider.refresh();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "logicfl.addTest",
+      (testItem: vscode.TestItem) => {
+        if (testItem.children.size === 0 && testItem.canResolveChildren) {
+          vscode.window.showWarningMessage(
+            "이 항목은 아직 Test Explorer에서 확장되지 않았습니다.\n트리를 한 번 펼쳐서 테스트 메서드들을 로딩해주세요."
+          );
+          return;
+        }
+        vscode.window.showInformationMessage(
+          `LogicFL View에 테스트를 추가했습니다.`
+        );
+        logicFLTreeViewProvider.addItem(testItem);
+      }
+    )
+  );
+
   const disposable = vscode.commands.registerCommand(
     "logicfl.startAnalysis",
-    async (testItem: vscode.TestItem) => {
+    async (testItem: LogicFLItem) => {
       if (!testItem) {
         vscode.window.showErrorMessage("No test item selected");
         return;
       }
-      if (testItem.children.size !== 0) {
-        vscode.window.showErrorMessage(
-          "테스트 클래스 파일에서는 실행이 불가능합니다. 메서드를 선택해주세요."
-        );
-        return;
-      }
+
       try {
-        const isfailedTest = await analyzeTestInfoFromTestItem(
-          testItem,
-          context
-        );
-        if (!isfailedTest) {
-          return;
-        }
+        console.log("테스트 아이템:", testItem);
+        testItem.setLoading(true);
+        logicFLTreeViewProvider.refresh();
+
+        generateTestInfo(testItem, context);
         generateConfigurationArgs(
           testItem,
           vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
           context
         );
-        await runAnalyzer(testItem, context, "CoverageAnalyzer");
-        await runAnalyzer(testItem, context, "StaticAnalyzer");
-        await runAnalyzer(testItem, context, "DynamicAnalyzer");
-        await runAnalyzer(testItem, context, "FaultLocalizer");
+        runTest(
+          testItem,
+          context,
+          vscode.workspace.workspaceFolders?.[0].uri.fsPath!
+        )
+          .then(async (result) => {
+            console.log("테스트 결과:\n", result);
+            const lines = result.split("\n").map((line) => line.trim());
 
-        try {
-          const faultLocalizationResults = await getResult(testItem, context);
-          if (!faultLocalizationResults) {
-            console.error("Failed to get results");
-            return;
-          }
-          const document = await openJavaFile(testItem);
-          if (document) {
-            highlightLines(faultLocalizationResults);
-            showWebview(context, faultLocalizationResults, revealLineInEditor);
-          }
-        } catch (error) {
-          console.log("Error in getResult: " + error);
-        }
+            const failureLine = lines.find((line) =>
+              line.startsWith("Tests failed")
+            );
+            const failureCount = failureLine
+              ? parseInt(failureLine.split("-")[1].trim())
+              : 0;
+
+            const hasNPE = lines.some((line) =>
+              line.includes("NullPointerException")
+            );
+            if (failureCount === 0) {
+              vscode.window.showInformationMessage(
+                "모든 테스트가 성공했습니다."
+              );
+              return;
+            } else {
+              if (!hasNPE) {
+                vscode.window.showInformationMessage(
+                  "NullPointerException이 발생하지 않았습니다."
+                );
+                return;
+              }
+            }
+
+            await runAnalyzer(testItem, context, "CoverageAnalyzer");
+            await runAnalyzer(testItem, context, "StaticAnalyzer");
+            await runAnalyzer(testItem, context, "DynamicAnalyzer");
+            await runAnalyzer(testItem, context, "FaultLocalizer");
+
+            testItem.setLoading(false);
+            logicFLTreeViewProvider.refresh();
+
+            try {
+              const faultLocalizationResults = await getResult(
+                testItem,
+                context
+              );
+              if (!faultLocalizationResults) {
+                console.error("Failed to get results");
+                return;
+              }
+              const document = await openJavaFile(testItem);
+              if (document) {
+                highlightLines(faultLocalizationResults);
+                showWebview(
+                  context,
+                  faultLocalizationResults,
+                  revealLineInEditor
+                );
+              }
+            } catch (error) {
+              console.log("Error in getResult: " + error);
+            }
+          })
+          .catch((err) => {
+            console.error("테스트 실행 실패:\n", err);
+          });
       } catch (error) {
         console.log("Error in analyzeTestInfo: " + error);
       }

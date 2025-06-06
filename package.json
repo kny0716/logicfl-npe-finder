@@ -68,18 +68,39 @@
         }
       }
     },
+    "views": {
+      "test": [
+        {
+          "id": "logicfl.treeView",
+          "name": "LogicFL",
+          "icon": "debug-console"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "logicfl.startAnalysis",
-        "title": "Start Analysis using LogicFL"
+        "title": "Start Analysis using LogicFL",
+        "icon": "$(play)"
+      },
+      {
+        "command": "logicfl.addTest",
+        "title": "Add Test For LogicFL"
       }
     ],
     "menus": {
       "testing/item/context": [
         {
+          "command": "logicfl.addTest",
+          "when": "testing.hasRunnableTests",
+          "group": "logicfl"
+        }
+      ],
+      "view/item/context": [
+        {
           "command": "logicfl.startAnalysis",
-          "when": "true",
-          "group": "navigation"
+          "when": "view == logicfl.treeView && viewItem == logicflTestMethod",
+          "group": "inline"
         }
       ]
     }
