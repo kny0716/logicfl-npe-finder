@@ -6,8 +6,8 @@ export function showWebview(
   onLineJump: (line: number) => void
 ) {
   const panel = vscode.window.createWebviewPanel(
-    "myPanel",
-    "My Panel",
+    "logicfl.resultView",
+    "LogicFL ResultView",
     vscode.ViewColumn.Beside,
     {
       enableScripts: true,

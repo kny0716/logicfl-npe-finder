@@ -2,13 +2,14 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import { runAnalyzer } from "./runAnalyzer";
+import { LogicFLItem } from "./models/logicFLItem";
 
 export function generateConfigurationArgs(
-  testItem: vscode.TestItem,
+  testItem: LogicFLItem,
   workspacePath: string,
   context: vscode.ExtensionContext
 ): void {
-  const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+  const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
   const classNameTag = fqcn.split(".").pop() ?? fqcn;
   let className = fqcn.split(".").pop() ?? fqcn;
   className = className.replace(/Test$/i, "");
@@ -28,7 +29,14 @@ export function generateConfigurationArgs(
   const jvmPath = process.platform === "win32" ? "java" : "/usr/bin/java";
 
   const outputDir = path.join(extensionPath, "result", className);
-  fs.mkdirSync(outputDir, { recursive: true });
+  if (outputDir) {
+    try {
+      fs.mkdirSync(outputDir, { recursive: true });
+    } catch (err) {
+      console.error("디렉토리 생성 실패:", err);
+    }
+  }
+  // fs.mkdirSync(outputDir, { recursive: true });
   const jacocoPath = path.join(extensionPath, "resources", "jacocoagent.jar");
   const rulesPath = path.join(extensionPath, "resources", "npe-rules.pl");
 
@@ -87,8 +95,6 @@ export function generateConfigurationArgs(
     { encoding: "utf-8", flag: "w" }
   );
   if (!fs.existsSync(testsInfo)) {
-    vscode.window.showErrorMessage("tests.json 파일이 존재하지 않음.");
-  } else {
-    vscode.window.showInformationMessage("tests.json 파일이 존재함.");
+    console.log("tests.json 파일이 존재하지 않음.");
   }
 }
