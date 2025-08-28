@@ -9,32 +9,46 @@ import { generateTestInfo } from "./generateTestInfo";
 import { runTest } from "./runTest";
 import { LogicFLTreeViewProvider } from "./views/logicFLTreeView";
 import { LogicFLItem } from "./models/logicFLItem";
+import { console } from "inspector";
 
 async function getResult(
   testItem: LogicFLItem,
   context: vscode.ExtensionContext
-): Promise<number[] | undefined> {
+): Promise<{ cause: number; result: number }[] | undefined> {
   const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
   let className = fqcn.split(".").pop() ?? fqcn;
   className = className.replace(/Test$/i, "");
 
   const outputDir = path.join(context.extensionPath, "result", className);
-  const filePath = path.join(outputDir, "fault_locs.txt");
+  const filePath = path.join(outputDir, "root_cause.txt");
   try {
     const content = await fs.readFileSync(filePath, "utf-8");
-    const lines = content.split(/\r?\n/);
-    const lineNumbers: number[] = [];
+    const lines = content.split(/\r?\n/).filter((line) => line.trim() !== "");
+    const results: { cause: number; result: number }[] = [];
+    let currentResultLine: number | null = null;
     for (const line of lines) {
-      const parts = line.trim().split(/\s+/);
-      const lineNum = parseInt(parts[1], 10);
-      if (!isNaN(lineNum)) {
-        lineNumbers.push(lineNum);
+      // 'NPE at line'으로 시작하는 줄에서 결과 라인 번호 추출
+      if (line.includes("NPE at line")) {
+        const match = line.match(/line\(\S+,\s*(\d+)\)/);
+        if (match) {
+          currentResultLine = parseInt(match[1], 10);
+        }
+      }
+      // 'can be caused by' 다음 줄에서 원인 라인 번호 추출
+      else if (line.includes("can be caused by")) {
+        // 다음 줄에서 라인 번호 파싱
+        continue;
+      } else if (currentResultLine !== null) {
+        const match = line.match(/line\(\S+,\s*(\d+)\)/);
+        if (match) {
+          const causeLine = parseInt(match[1], 10);
+          results.push({ cause: causeLine, result: currentResultLine });
+        }
       }
     }
-    console.log(`결과를 찾았습니다: ${lineNumbers}`);
-    return lineNumbers.sort((a, b) => a - b);
+    return results;
   } catch (err) {
-    console.error(err);
+    console.error(`Error reading file ${filePath}:`, err);
     return undefined;
   }
 }
@@ -157,15 +171,17 @@ export async function activate(context: vscode.ExtensionContext) {
               line.includes("NullPointerException")
             );
             if (failureCount === 0) {
-              vscode.window.showInformationMessage(
-                "모든 테스트가 성공했습니다."
-              );
+              vscode.window.showInformationMessage("성공한 테스트입니다.");
+              testItem.setLoading(false);
+              logicFLTreeViewProvider.refresh();
               return;
             } else {
               if (!hasNPE) {
                 vscode.window.showInformationMessage(
                   "NullPointerException이 발생하지 않았습니다."
                 );
+                testItem.setLoading(false);
+                logicFLTreeViewProvider.refresh();
                 return;
               }
             }
@@ -183,13 +199,23 @@ export async function activate(context: vscode.ExtensionContext) {
                 testItem,
                 context
               );
-              if (!faultLocalizationResults) {
+              if (
+                !faultLocalizationResults ||
+                faultLocalizationResults.length === 0
+              ) {
                 console.error("Failed to get results");
                 return;
               }
+              const allLinesToHighlight = faultLocalizationResults.flatMap(
+                (pair) => [pair.cause, pair.result]
+              );
+              const uniqueLines = Array.from(new Set(allLinesToHighlight)).sort(
+                (a, b) => a - b
+              );
+
               const document = await openJavaFile(testItem);
               if (document) {
-                highlightLines(faultLocalizationResults);
+                highlightLines(uniqueLines);
                 showWebview(
                   context,
                   faultLocalizationResults,
