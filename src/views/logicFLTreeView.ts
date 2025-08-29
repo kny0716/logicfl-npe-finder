@@ -18,10 +18,8 @@ export class LogicFLTreeViewProvider
 
   getChildren(element?: LogicFLItem): Thenable<LogicFLItem[]> {
     if (!element) {
-      // Return an empty array if no root items are defined
       return Promise.resolve(this.rootItems);
     }
-    // Return children of the given element
     return Promise.resolve(element.children);
   }
 
@@ -63,5 +61,16 @@ export class LogicFLTreeViewProvider
     this.rootItems.push(logicFLItem);
 
     this._onDidChangeTreeData.fire();
+  }
+
+  removeItem(item: LogicFLItem): void {
+    const index = this.rootItems.findIndex((i) => i.id === item.id);
+    if (index > -1) {
+      this.rootItems.splice(index, 1);
+      this.refresh();
+      vscode.window.showInformationMessage(
+        `'${item.label}' 항목을 LogicFL View에서 제거했습니다.`
+      );
+    }
   }
 }

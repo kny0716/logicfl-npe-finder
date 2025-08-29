@@ -4,14 +4,20 @@ export class LogicFLItem extends vscode.TreeItem {
   public children: LogicFLItem[];
 
   constructor(public readonly testItem: vscode.TestItem) {
+    const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+    const testName = fqcn.split(".").pop() ?? fqcn;
+    const className = testName.replace(/Test$/i, "");
+
     const iconMatch = testItem.label.match(/\$\(([^\)]+)\)/);
-    const cleanedLabel = testItem.label.replace(/\$\([^\)]+\)\s*/, ""); // Remove the icon syntax
+    const cleanedLabel = testItem.label.replace(/\$\([^\)]+\)\s*/, "");
     const state =
       testItem.children.size > 0
         ? vscode.TreeItemCollapsibleState.Collapsed
         : vscode.TreeItemCollapsibleState.None;
     super(cleanedLabel, state);
     this.id = testItem.id;
+
+    this.tooltip = `Test Class : ${className}`;
 
     if (iconMatch) {
       this.iconPath = new vscode.ThemeIcon(iconMatch[1]); // Use the extracted icon name
@@ -23,7 +29,6 @@ export class LogicFLItem extends vscode.TreeItem {
       this.contextValue = "logicflTestClass";
     }
 
-    // Initialize children from testItem's children
     this.children = [];
     testItem.children.forEach((childTestItem) => {
       const child = childTestItem as vscode.TestItem;

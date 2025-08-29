@@ -27,16 +27,12 @@ async function getResult(
     const results: { cause: number; result: number }[] = [];
     let currentResultLine: number | null = null;
     for (const line of lines) {
-      // 'NPE at line'으로 시작하는 줄에서 결과 라인 번호 추출
       if (line.includes("NPE at line")) {
         const match = line.match(/line\(\S+,\s*(\d+)\)/);
         if (match) {
           currentResultLine = parseInt(match[1], 10);
         }
-      }
-      // 'can be caused by' 다음 줄에서 원인 라인 번호 추출
-      else if (line.includes("can be caused by")) {
-        // 다음 줄에서 라인 번호 파싱
+      } else if (line.includes("can be caused by")) {
         continue;
       } else if (currentResultLine !== null) {
         const match = line.match(/line\(\S+,\s*(\d+)\)/);
@@ -128,6 +124,15 @@ export async function activate(context: vscode.ExtensionContext) {
           `LogicFL View에 테스트를 추가했습니다.`
         );
         logicFLTreeViewProvider.addItem(testItem);
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "logicfl.removeTest",
+      (item: LogicFLItem) => {
+        logicFLTreeViewProvider.removeItem(item);
       }
     )
   );

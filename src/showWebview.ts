@@ -14,7 +14,6 @@ export function showWebview(
     }
   );
   const sortedLinePairs = linePairs.sort((a, b) => a.cause - b.cause);
-  console.log("Sorted Line Pairs:", sortedLinePairs);
   const data = JSON.stringify(sortedLinePairs);
 
   const npeLine =
@@ -76,123 +75,84 @@ export function showWebview(
           const linePairs = ${data};
           const tooltip = d3.select("#tooltip");
 
-          // 노드와 링크 데이터 생성
-          const nodes = {};
-          const links = [];
-          linePairs.forEach(pair => {
-              const causeId = 'line-' + pair.cause;
-              const resultId = 'line-' + pair.result;
-
-              if (!nodes[causeId]) { nodes[causeId] = { id: causeId, line: pair.cause, type: 'cause', incoming: 0, outgoing: 0 }; }
-              if (!nodes[resultId]) { nodes[resultId] = { id: resultId, line: pair.result, type: 'result', incoming: 0, outgoing: 0 }; }
-              links.push({ source: causeId, target: resultId });
-              nodes[causeId].outgoing++;
-              nodes[resultId].incoming++;
-          });
-
-          // 노드 타입 및 색상 결정
-          Object.values(nodes).forEach(d => {
-              if (d.incoming === 0) {
-                  d.type = 'root-cause'; // 외부로부터의 연결이 없으면 'root-cause'
-                  d.color = '#e74c3c'; // 빨간색
-              } else if (d.outgoing > 1) {
-                  d.type = 'propagation'; // 외부로 연결되면 'propagation'
-                  d.color = '#f39c12'; // 주황색
-              } else {
-                  d.type = 'result'; // 외부로 연결되지 않으면 'result'
-                  d.color = '#bdc3c7'; // 회색
-              }
-          });
-
-          const graphData = {
-              nodes: Object.values(nodes),
-              links: links
-          };
-        
-          const width = 800;
-          const height = 600;
-          const svg = d3.select("#rootCauseGraph")
-              .attr("width", width)
-              .attr("height", height);
-
-          // 화살표 마커 정의
-          svg.append("defs").append("marker")
-              .attr("id", "arrowhead")
-              .attr("viewBox", "-0 -5 10 10")
-              .attr("refX", 25)
-              .attr("refY", 0)
-              .attr("orient", "auto")
-              .attr("markerWidth", 8)
-              .attr("markerHeight", 8)
-              .attr("xoverflow", "visible")
-              .append("svg:path")
-              .attr("d", "M 0,-5 L 10 ,0 L 0,5")
-              .attr("fill", "#999");
-
-          const simulation = d3.forceSimulation(graphData.nodes)
-              .force("link", d3.forceLink(graphData.links).id(d => d.id).distance(100))
-              .force("charge", d3.forceManyBody().strength(-300))
-              .force("center", d3.forceCenter(width / 2, height / 2))
-              .force("y", d3.forceY(d => {
-                  if (d.type === 'root-cause') return height * 0.2;
-                  if (d.type === 'propagation') return height * 0.5;
-                  return height * 0.8;
-              }).strength(0.5)); 
-
-          const link = svg.append("g")
-              .attr("class", "links")
-              .selectAll("line")
-              .data(graphData.links)
-              .enter().append("line")
-              .attr("class", "link")
-              .attr("marker-end", d => d.source.line !== d.target.line ? "url(#arrowhead)" : null);
+          const npeLine = ${npeLine};
           
-          const node = svg.append("g")
-              .attr("class", "nodes")
-              .selectAll(".node")
-              .data(graphData.nodes)
-              .enter().append("g")
+          // D3 계층 구조 데이터 생성
+          const uniqueCauses = Array.from(new Set(linePairs.map(p => p.cause))).filter(c => c !== npeLine);
+          
+          const rootData = {
+              id: "line-" + npeLine,
+              line: npeLine,
+              type: "result",
+              children: uniqueCauses.map(c => ({
+                  id: "line-" + c,
+                  line: c,
+                  type: "cause"
+              }))
+          };
+
+          const margin = { top: 40, right: 90, bottom: 50, left: 90 };
+          const width = 800 - margin.left - margin.right;
+          const height = Math.max(600, uniqueCauses.length * 50) - margin.top - margin.bottom;
+
+          const svg = d3.select("#rootCauseGraph")
+              .attr("width", width + margin.left + margin.right)
+              .attr("height", height + margin.top + margin.bottom)
+              .append("g")
+              .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+          const root = d3.hierarchy(rootData);
+          const treeLayout = d3.tree().size([width, height]);
+          const treeData = treeLayout(root);
+
+          // 링크(화살표) 그리기
+          svg.selectAll(".link")
+              .data(treeData.links())
+              .enter()
+              .append("path")
+              .attr("class", "link")
+              .attr("d", d => "M" + d.source.x + "," + (height - d.source.y) + "L" + d.target.x + "," + (height - d.target.y));
+
+          // 노드 그리기
+          const node = svg.selectAll(".node")
+              .data(treeData.descendants())
+              .enter()
+              .append("g")
               .attr("class", "node")
+              .attr("transform", d => "translate(" + d.x + "," + (height - d.y) + ")")
               .on("mouseover", (event, d) => {
                   tooltip.style("opacity", 1);
                   tooltip.html("클릭 시 해당 라인으로 이동합니다.");
               })
               .on("mousemove", (event) => {
-                  tooltip.style("left", (event.pageX + 10) + "px")
-                         .style("top", (event.pageY - 10) + "px");
+                  tooltip.style("left", (event.pageX + 15) + "px")
+                         .style("top", (event.pageY - 20) + "px");
               })
               .on("mouseout", () => {
                   tooltip.style("opacity", 0);
               })
-              .call(d3.drag()
-                  .on("start", (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-                  .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
-                  .on("end", (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }))
               .on("click", (event, d) => {
                   vscode.postMessage({
                       command: 'jumpToLine',
-                      line: d.line
+                      line: d.data.line
                   });
               });
 
           node.append("circle")
               .attr("r", 15)
-              .attr("fill", d => d.color);
+              .attr("fill", d => {
+                  if (d.data.line === npeLine) {
+                      return '#3498db'; // 결과 노드는 파란색
+                  } else {
+                      return '#e74c3c'; // 원인 노드는 빨간색
+                  }
+              });
 
           node.append("text")
               .attr("dy", "0.35em")
               .attr("text-anchor", "middle")
-              .text(d => d.line)
+              .text(d => d.data.line)
               .style("fill", "#fff");
-
-          simulation.on("tick", () => {
-              link.attr("x1", d => d.source.x)
-                  .attr("y1", d => d.source.y)
-                  .attr("x2", d => d.target.x)
-                  .attr("y2", d => d.target.y);
-
-              node.attr("transform", (d) => "translate(" + d.x + "," + d.y + ")");
-          });
       </script>
   </body>
   </html>`;
