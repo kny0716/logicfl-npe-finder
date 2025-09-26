@@ -6,7 +6,8 @@ import { LogicFLItem } from "./models/logicFLItem";
 export function runTest(
   testItem: LogicFLItem,
   context: vscode.ExtensionContext,
-  workspacePath: string
+  workspacePath: string,
+  configJson: any
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const extensionPath = context.extensionPath;
@@ -36,11 +37,11 @@ export function runTest(
       junitVersion === "junit5"
         ? "logicfl.coverage.JUnit5TestRunner"
         : "logicfl.coverage.JUnit4TestRunner";
-    const javaArgs = ["-cp", jarPath, junitRunner, configFilePath];
+    console.log("configJson:", configJson);
+    const javaArgs = ["-cp", jarPath, junitRunner, configJson];
 
     const child = cp.spawn("java", javaArgs, {
       cwd: extensionPath,
-      shell: true,
     });
 
     let stdout = "";
