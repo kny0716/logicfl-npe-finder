@@ -203,7 +203,7 @@ export async function activate(context: vscode.ExtensionContext) {
             await runAnalyzer(testItem, context, "CoverageAnalyzer");
             await runAnalyzer(testItem, context, "StaticAnalyzer");
             await runAnalyzer(testItem, context, "DynamicAnalyzer");
-            // await runAnalyzer(testItem, context, "FaultLocalizer");
+            await runAnalyzer(testItem, context, "FaultLocalizer");
 
             testItem.setLoading(false);
             logicFLTreeViewProvider.refresh();
