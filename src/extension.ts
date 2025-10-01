@@ -151,15 +151,24 @@ export async function activate(context: vscode.ExtensionContext) {
         logicFLTreeViewProvider.refresh();
 
         generateTestInfo(testItem, context);
-        generateConfigurationArgs(
+
+        const configObj = generateConfigurationArgs(
           testItem,
           vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
           context
         );
+
+        const configJson = JSON.stringify(configObj);
+        // generateConfigurationArgs(
+        //   testItem,
+        //   vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
+        //   context
+        // );
         runTest(
           testItem,
           context,
-          vscode.workspace.workspaceFolders?.[0].uri.fsPath!
+          vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
+          configJson
         )
           .then(async (result) => {
             console.log("테스트 결과:\n", result);
