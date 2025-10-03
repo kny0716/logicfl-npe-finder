@@ -1,15 +1,16 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import { exec } from "child_process";
 import { generateConfigurationArgs } from "./generateConfiguration";
 import { runAnalyzer } from "./runAnalyzer";
-import { highlightLines } from "./highlightResult";
-import { showWebview } from "./showWebview";
+import { highlightNulls } from "./highlightResult";
 import { generateTestInfo } from "./generateTestInfo";
 import { runTest } from "./runTest";
 import { LogicFLTreeViewProvider } from "./views/logicFLTreeView";
 import { LogicFLItem } from "./models/logicFLItem";
 import { console } from "inspector";
+import { showPropagationGraph } from "./showPropagationGraph";
 
 async function getResult(
   testItem: LogicFLItem,
@@ -56,11 +57,14 @@ async function openJavaFile(
   const parts = fqcn.split(".");
   const testName = parts.pop()!;
   const ClassName = testName.replace(/test/i, "");
+
+  const settings = vscode.workspace.getConfiguration("logicfl");
+  const sourcePath = settings.get<string>("sourcePath", "src/main/java");
+  const sourcePathParts = sourcePath.split(/[/\\]/);
+
   const filePath = path.join(
     vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
-    "src",
-    "main",
-    "java",
+    ...sourcePathParts,
     ...parts,
     ClassName + ".java"
   );
@@ -68,27 +72,73 @@ async function openJavaFile(
   if (fs.existsSync(filePath)) {
     const document = await vscode.workspace.openTextDocument(filePath);
     await vscode.window.showTextDocument(document);
-    console.log(`파일을 열었습니다: ${filePath}`);
     return document;
   } else {
-    console.log(`파일을 찾을 수 없습니다: ${filePath}`);
+    vscode.window.showErrorMessage(`파일을 찾을 수 없습니다: ${filePath} `);
     return undefined;
   }
 }
 
-function revealLineInEditor(line: number) {
-  const editors = vscode.window.visibleTextEditors;
-  const editor = editors.find((e) => e.document.languageId === "java");
-  if (!editor) {
-    return;
+function checkPrologInstalled(): Promise<boolean> {
+  return new Promise((resolve) => {
+    exec("swipl --version", (error, stdout, stderr) => {
+      if (error) {
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    });
+  });
+}
+
+function checkJdkInstalled(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const settings = vscode.workspace.getConfiguration("logicfl");
+    const userJvmPath = settings.get<string>("jvmPath");
+
+    const jvmPath =
+      userJvmPath && userJvmPath.trim() !== ""
+        ? userJvmPath
+        : process.platform === "win32"
+        ? "java"
+        : "/usr/bin/java";
+
+    exec(`"${jvmPath}" -version`, (error) => {
+      if (error) {
+        console.error(`JDK check failed for path: "${jvmPath}"`, error);
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    });
+  });
+}
+function checkProjectBuilt(): { isBuilt: boolean; checkedPath: string | null } {
+  const settings = vscode.workspace.getConfiguration("logicfl");
+  const classPaths = settings.get<string[]>("classPaths", []);
+
+  if (classPaths.length === 0) {
+    return { isBuilt: true, checkedPath: null };
   }
-  const position = new vscode.Position(line - 1, 0);
-  const range = new vscode.Range(position, position);
-  editor.revealRange(
-    range,
-    vscode.TextEditorRevealType.InCenterIfOutsideViewport
-  );
-  editor.selection = new vscode.Selection(position, position);
+
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+  if (!workspaceRoot) {
+    return { isBuilt: false, checkedPath: null };
+  }
+
+  const representativePath = classPaths.find((p) => !p.includes("*"));
+
+  if (!representativePath) {
+    return { isBuilt: true, checkedPath: null };
+  }
+
+  const fullPath = path.join(workspaceRoot, representativePath);
+
+  if (fs.existsSync(fullPath)) {
+    return { isBuilt: true, checkedPath: fullPath };
+  } else {
+    return { isBuilt: false, checkedPath: fullPath };
+  }
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -145,8 +195,40 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
 
+      const isPrologInstalled = await checkPrologInstalled();
+      if (!isPrologInstalled) {
+        vscode.window
+          .showWarningMessage(
+            "LogicFL 분석을 위해서는 Prolog가 필요합니다. 설치 후 다시 시도해주세요.",
+            "설치 안내 보기"
+          )
+          .then((selection) => {
+            if (selection === "설치 안내 보기") {
+              vscode.env.openExternal(
+                vscode.Uri.parse("https://www.swi-prolog.org/download/stable")
+              );
+            }
+          });
+        return;
+      }
+
+      const isJdkInstalled = await checkJdkInstalled();
+      if (!isJdkInstalled) {
+        vscode.window.showErrorMessage(
+          "Java(JDK)를 찾을 수 없습니다. JDK를 설치하거나 VS Code 설정에서 'logicfl.jvmPath'를 올바르게 지정해주세요."
+        );
+        return;
+      }
+
+      const buildCheck = checkProjectBuilt();
+      if (!buildCheck.isBuilt) {
+        vscode.window.showErrorMessage(
+          `프로젝트가 빌드되지 않은 것 같습니다. 경로를 찾을 수 없습니다: ${buildCheck.checkedPath}\n프로젝트를 먼저 빌드한 후 다시 시도해주세요.`
+        );
+        return;
+      }
+
       try {
-        console.log("테스트 아이템:", testItem);
         testItem.setLoading(true);
         logicFLTreeViewProvider.refresh();
 
@@ -159,11 +241,6 @@ export async function activate(context: vscode.ExtensionContext) {
         );
 
         const configJson = JSON.stringify(configObj);
-        // generateConfigurationArgs(
-        //   testItem,
-        //   vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
-        //   context
-        // );
         runTest(
           testItem,
           context,
@@ -220,21 +297,11 @@ export async function activate(context: vscode.ExtensionContext) {
                 console.error("Failed to get results");
                 return;
               }
-              const allLinesToHighlight = faultLocalizationResults.flatMap(
-                (pair) => [pair.cause, pair.result]
-              );
-              const uniqueLines = Array.from(new Set(allLinesToHighlight)).sort(
-                (a, b) => a - b
-              );
 
               const document = await openJavaFile(testItem);
               if (document) {
-                highlightLines(uniqueLines);
-                showWebview(
-                  context,
-                  faultLocalizationResults,
-                  revealLineInEditor
-                );
+                await highlightNulls(testItem, context);
+                showPropagationGraph(context, testItem);
               }
             } catch (error) {
               console.log("Error in getResult: " + error);

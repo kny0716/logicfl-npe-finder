@@ -18,15 +18,26 @@ export function generateConfigurationArgs(
 
   const baseDir = workspacePath;
   const extensionPath = context.extensionPath;
+
+  const userClassPaths = settings.get<string[]>("classPaths", [
+    "build/classes/java/main",
+    "build/classes/java/test",
+    "build/libs/*",
+  ]);
+
   const classPathStr = [
-    path.join(baseDir, "build", "classes", "java", "main"),
-    path.join(baseDir, "build", "classes", "java", "test"),
-    path.join(baseDir, "build", "libs", "*"),
+    ...userClassPaths.map((p) => path.join(baseDir, p)),
     path.join(extensionPath, "logic-fl", "build", "classes", "java", "main"),
     path.join(extensionPath, "logic-fl", "build", "libs", "*"),
   ].join(path.delimiter);
 
-  const jvmPath = process.platform === "win32" ? "java" : "/usr/bin/java";
+  const userJvmPath = settings.get<string>("jvmPath");
+  const jvmPath =
+    userJvmPath && userJvmPath.trim() !== ""
+      ? userJvmPath
+      : process.platform === "win32"
+      ? "java"
+      : "/usr/bin/java";
 
   const outputDir = path.join(extensionPath, "result", className);
   if (outputDir) {
