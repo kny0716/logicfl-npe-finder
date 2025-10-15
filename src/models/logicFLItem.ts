@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 
 export class LogicFLItem extends vscode.TreeItem {
   public children: LogicFLItem[];
+  private originalIcon: vscode.ThemeIcon;
 
   constructor(public readonly testItem: vscode.TestItem) {
     const fqcn = testItem.id.split("@").pop()?.split("#")[0] ?? "UnknownTest";
@@ -21,6 +22,10 @@ export class LogicFLItem extends vscode.TreeItem {
 
     if (iconMatch) {
       this.iconPath = new vscode.ThemeIcon(iconMatch[1]); // Use the extracted icon name
+      this.originalIcon = new vscode.ThemeIcon(iconMatch[1]);
+    } else {
+      this.iconPath = new vscode.ThemeIcon("beaker");
+      this.originalIcon = new vscode.ThemeIcon("beaker");
     }
 
     if (testItem.children.size === 0) {
@@ -40,5 +45,9 @@ export class LogicFLItem extends vscode.TreeItem {
     this.iconPath = isLoading
       ? new vscode.ThemeIcon("loading~spin")
       : new vscode.ThemeIcon("check");
+  }
+
+  setOriginalIcon() {
+    this.iconPath = this.originalIcon;
   }
 }

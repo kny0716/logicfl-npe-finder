@@ -35,27 +35,35 @@ interface CodeInfo {
 
 function mapIdToName(id: string, facts: string): string | null {
   // literal
-  if (id.includes("literal")) return "null";
+  if (id.includes("literal")) {
+    return "null";
+  }
 
   // name(...)
   const nameRegex = new RegExp(
     `name\\(${id}, [^,]+, [^,]+, [^,]+, range\\([^)]*\\), '([^']+)'\\)`
   );
   const m1 = facts.match(nameRegex);
-  if (m1) return m1[1];
+  if (m1) {
+    return m1[1];
+  }
 
   // expr(...)
   const exprRegex = new RegExp(
     `expr\\(${id}, [^,]+, [^,]+, [^,]+, range\\([^)]*\\), "([^"]+)"\\)`
   );
   const m2 = facts.match(exprRegex);
-  if (m2) return m2[1];
+  if (m2) {
+    return m2[1];
+  }
 
   const nameRefRegex = new RegExp(
     `name_ref\\(${id}, [^,]+, '([^']+)',[^)]*\\)`
   );
   const m3 = facts.match(nameRefRegex);
-  if (m3) return m3[1];
+  if (m3) {
+    return m3[1];
+  }
 
   return null;
 }
@@ -106,7 +114,9 @@ export function buildPropagationGraph(
     /assign\(([^,]+),\s*([^,]+),\s*line\([^,]+,\s*(\d+)\)\)/g
   )) {
     const [_, dst, src, lineStr] = m;
-    if (!assignsByDst.has(dst)) assignsByDst.set(dst, []);
+    if (!assignsByDst.has(dst)) {
+      assignsByDst.set(dst, []);
+    }
     assignsByDst.get(dst)!.push({ src, line: parseInt(lineStr, 10) });
   }
 
@@ -193,7 +203,9 @@ export function buildPropagationGraph(
     const { id, line } = currentTarget;
 
     const currentKey = addNode(id, line);
-    if (visited.has(currentKey)) continue;
+    if (visited.has(currentKey)) {
+      continue;
+    }
     visited.add(currentKey);
 
     const allAssigns = assignsByDst.get(id) || [];
