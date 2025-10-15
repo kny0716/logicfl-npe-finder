@@ -2,7 +2,7 @@ import * as cp from "child_process";
 import * as path from "path";
 import * as vscode from "vscode";
 import { LogicFLItem } from "./models/logicFLItem";
-import { generateConfigurationArgs } from "./generateConfiguration";
+import { generateConfig } from "./generateConfig";
 
 export function runAnalyzer(
   testItem: LogicFLItem,
@@ -20,14 +20,9 @@ export function runAnalyzer(
 
     const extensionPath = context.extensionPath;
 
-    // workspacepath 맞는지 확인
     const workspacePath =
       vscode.workspace.workspaceFolders?.[0].uri.fsPath ?? "";
-    const configObj = generateConfigurationArgs(
-      testItem,
-      workspacePath,
-      context
-    );
+    const configObj = generateConfig(testItem, workspacePath, context);
 
     const configJson = JSON.stringify(configObj);
 
@@ -49,9 +44,6 @@ export function runAnalyzer(
     const packageName = isCoverage
       ? `logicfl.coverage.${analyzerName}`
       : `logicfl.analyzer.${analyzerName}`;
-
-    // config 파일 대신 JSON 문자열로 전달
-    // const javaArgs = ["-cp", jarPath, packageName, configFilePath];
 
     const javaArgs = ["-cp", jarPath, packageName, "--json", configJson];
 

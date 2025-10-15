@@ -128,9 +128,7 @@ async function parseJUnitResultsAndWriteTestInfo(
                   (error && error["@_message"]) ||
                   "Unknown Failure/Error",
               });
-            }
-            // 실패/오류 태그는 없지만 system-out 로그에 에러 메시지가 포함된 경우
-            else if (
+            } else if (
               typeof systemOut === "string" &&
               systemOut.toLowerCase().includes("error")
             ) {
@@ -140,9 +138,7 @@ async function parseJUnitResultsAndWriteTestInfo(
                 name: testName,
                 message: systemOut.trim(),
               });
-            }
-            // 성공한 경우
-            else {
+            } else {
               testResults["passed.classes"].push(className);
             }
           }

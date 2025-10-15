@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import { exec } from "child_process";
-import { generateConfigurationArgs } from "./generateConfiguration";
+import { generateConfig } from "./generateConfig";
 import { runAnalyzer } from "./runAnalyzer";
 import { highlightNulls } from "./highlightResult";
 import { generateTestInfo } from "./generateTestInfo";
@@ -234,7 +234,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         generateTestInfo(testItem, context);
 
-        const configObj = generateConfigurationArgs(
+        const configObj = generateConfig(
           testItem,
           vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
           context
@@ -301,7 +301,7 @@ export async function activate(context: vscode.ExtensionContext) {
               const document = await openJavaFile(testItem);
               if (document) {
                 await highlightNulls(testItem, context);
-                showPropagationGraph(context, testItem);
+                showPropagationGraph(testItem, context);
               }
             } catch (error) {
               console.log("Error in getResult: " + error);

@@ -11,12 +11,11 @@ export function generateTestInfo(
   const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
   const testName =
     testItem.id!.split("@").pop()?.split("#")[1] ?? "UnknownTest";
-  const classNameTag = fqcn.split(".").pop() ?? fqcn; // 파일 이름 저장하기 위함
+  const classNameTag = fqcn.split(".").pop() ?? fqcn;
   let className = fqcn.split(".").pop() ?? fqcn;
   className = className.replace(/Test$/i, "");
 
   console.log(fqcn, testName, className, classNameTag);
-  // sample.Sample2Test Sample2Test Sample2
 
   const testResults: {
     "passed.classes": string[];
@@ -27,7 +26,7 @@ export function generateTestInfo(
   testResults["failed.classes"].push(fqcn);
   testResults["failed.tests"].push({
     class: fqcn,
-    name: testName.replace(/\(\)$/, ""), // 괄호 제거
+    name: testName.replace(/\(\)$/, ""),
   });
 
   const outputPath = path.join(context.extensionPath, "result", className);
@@ -38,7 +37,6 @@ export function generateTestInfo(
       console.error("디렉토리 생성 실패:", err);
     }
   }
-  // fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
   console.log(path.dirname(outputPath));
 
