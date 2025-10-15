@@ -258,12 +258,26 @@ export async function activate(context: vscode.ExtensionContext) {
               ? parseInt(failureLine.split("-")[1].trim())
               : 0;
 
+            const foundLine = lines.find((line) =>
+              /^(Tests? (found|executed))/i.test(line)
+            );
+            const foundCount = foundLine
+              ? parseInt(foundLine.split("-")[1].trim())
+              : 0;
+
             const hasNPE = lines.some((line) =>
               line.includes("NullPointerException")
             );
-            if (failureCount === 0) {
+            if (foundCount === 0) {
+              vscode.window.showInformationMessage(
+                "테스트가 발견되지 않았습니다. classPaths와 Junit Version 설정을 확인해주세요."
+              );
+              testItem.setOriginalIcon();
+              logicFLTreeViewProvider.refresh();
+              return;
+            } else if (failureCount === 0) {
               vscode.window.showInformationMessage("성공한 테스트입니다.");
-              testItem.setLoading(false);
+              testItem.setOriginalIcon();
               logicFLTreeViewProvider.refresh();
               return;
             } else {
@@ -271,7 +285,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 vscode.window.showInformationMessage(
                   "NullPointerException이 발생하지 않았습니다."
                 );
-                testItem.setLoading(false);
+                testItem.setOriginalIcon();
                 logicFLTreeViewProvider.refresh();
                 return;
               }

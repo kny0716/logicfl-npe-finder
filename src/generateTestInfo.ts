@@ -7,15 +7,12 @@ export function generateTestInfo(
   testItem: LogicFLItem,
   context: vscode.ExtensionContext
 ): void {
-  console.log(testItem.id);
   const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
   const testName =
     testItem.id!.split("@").pop()?.split("#")[1] ?? "UnknownTest";
   const classNameTag = fqcn.split(".").pop() ?? fqcn;
   let className = fqcn.split(".").pop() ?? fqcn;
   className = className.replace(/Test$/i, "");
-
-  console.log(fqcn, testName, className, classNameTag);
 
   const testResults: {
     "passed.classes": string[];
