@@ -3,6 +3,16 @@ import * as path from "path";
 import { LogicFLItem } from "./models/logicFLItem";
 import * as vscode from "vscode";
 
+interface PropagationGraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  summary: {
+    fileName: string;
+    npeLine: number;
+    npeVariable: string;
+  };
+}
+
 interface GraphNode {
   id: string;
   label: string;
@@ -53,7 +63,7 @@ function mapIdToName(id: string, facts: string): string | null {
 export function buildPropagationGraph(
   testItem: LogicFLItem,
   context: vscode.ExtensionContext
-): { nodes: GraphNode[]; edges: GraphEdge[] } {
+): PropagationGraphData {
   const extensionPath = context.extensionPath;
   const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
   const classNameTag = fqcn.split(".").pop()?.replace(/Test$/i, "") ?? fqcn;
@@ -76,10 +86,16 @@ export function buildPropagationGraph(
     classNameTag,
     "code.facts.pl"
   );
+  const emptyResult = {
+    nodes: [],
+    edges: [],
+    summary: { fileName: "N/A", npeLine: 0, npeVariable: "N/A" },
+  };
 
   if (!fs.existsSync(logicFlPath) || !fs.existsSync(codeFactsPath)) {
     console.error("LogicFL 결과 파일이 존재하지 않습니다.");
-    return { nodes: [], edges: [] };
+    vscode.window.showErrorMessage("LogicFL 결과 파일이 존재하지 않습니다.");
+    return emptyResult;
   }
 
   const logicContent = fs.readFileSync(logicFlPath, "utf-8");
@@ -123,7 +139,10 @@ export function buildPropagationGraph(
     );
   if (!rcMatch) {
     console.error("root_cause.txt에서 NPE 시작점을 찾을 수 없습니다.");
-    return { nodes: [], edges: [] };
+    vscode.window.showErrorMessage(
+      "root_cause.txt에서 NPE 시작점을 찾을 수 없습니다."
+    );
+    return emptyResult;
   }
   const [_, npeLineStr, npeVarId] = rcMatch;
   const startTarget = { id: npeVarId, line: parseInt(npeLineStr, 10) };
@@ -157,6 +176,7 @@ export function buildPropagationGraph(
           font: { color: "#ffffff" },
         };
       } else if (info && info.code === "null") {
+        label = `null\nline ${line}`;
         nodeStyle = {
           color: { background: "#ecf0f1", border: "#bdc3c7" },
           font: { color: "#2c3e50" },
@@ -191,15 +211,16 @@ export function buildPropagationGraph(
         arrows: "to",
       });
 
-      traceQueue.push({ id: predecessor.src, line: predecessor.line });
+      if (!visited.has(predecessorKey)) {
+        traceQueue.push({ id: predecessor.src, line: predecessor.line });
+      }
     }
   }
 
-  const nodeArr = Array.from(nodes.values());
-
-  console.log("Nodes:", nodeArr);
-
-  console.log("Edges:", edges);
-
-  return { nodes: Array.from(nodes.values()), edges };
+  const summary = {
+    fileName: `${classNameTag}.java`,
+    npeLine: startTarget.line,
+    npeVariable: mapIdToName(npeVarId, codeFactsContent) || npeVarId,
+  };
+  return { nodes: Array.from(nodes.values()), edges, summary };
 }

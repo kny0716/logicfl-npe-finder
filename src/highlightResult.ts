@@ -8,13 +8,6 @@ interface HighlightTarget {
   line: number;
 }
 
-interface RangeInfo {
-  startLine: number;
-  endLine: number;
-  startOffset: number;
-  length: number;
-}
-
 const decorationType = vscode.window.createTextEditorDecorationType({
   backgroundColor: "rgba(208, 243, 10, 0.3)",
   borderRadius: "5px",
@@ -26,7 +19,7 @@ function computeLineOffsets(text: string): number[] {
   let current = 0;
   for (const line of lines) {
     offsets.push(current);
-    current += line.length + 1; // '\n' 포함
+    current += line.length + 1;
   }
   return offsets;
 }
@@ -63,19 +56,17 @@ export async function highlightNulls(
     return;
   }
 
-  // 1. root_cause.txt 파싱 (id + line만 추출)
   const rootCauseContent = fs.readFileSync(rootCausePath, "utf-8");
   const highlightTargets: HighlightTarget[] = [];
 
   const rcRegex = /([a-zA-Z0-9_]+)\[.*?\]\s*-\s*line\(([^,]+),\s*(\d+)\)/g;
   let match;
   while ((match = rcRegex.exec(rootCauseContent)) !== null) {
-    const id = match[1]; // v_bar_2, f_field_1_1, sample6_1_literal1, ...
-    const line = parseInt(match[3]); // 실제 라인 번호
+    const id = match[1];
+    const line = parseInt(match[3]);
     highlightTargets.push({ id, line });
   }
 
-  // 2. code.facts.pl 매핑
   const codeFactsContent = fs.readFileSync(codeFactsPath, "utf-8");
   const decorations: vscode.DecorationOptions[] = [];
 
@@ -91,11 +82,9 @@ export async function highlightNulls(
   );
 
   const javaContent = fs.readFileSync(filePath, "utf-8");
-  const lines = javaContent.split("\n");
   const lineOffsets = computeLineOffsets(javaContent);
 
   for (const target of highlightTargets) {
-    // id와 라인 번호로 fact 검색
     const factRegex = new RegExp(
       `${target.id}.*?range\\([^,]+,\\s*(\\d+),\\s*(\\d+),\\s*${target.line},\\s*${target.line}\\)`,
       "g"

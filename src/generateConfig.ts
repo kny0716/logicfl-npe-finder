@@ -3,8 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { LogicFLItem } from "./models/logicFLItem";
 
-// config 객체로 반환
-export function generateConfigurationArgs(
+export function generateConfig(
   testItem: LogicFLItem,
   workspacePath: string,
   context: vscode.ExtensionContext
@@ -47,7 +46,6 @@ export function generateConfigurationArgs(
       console.error("디렉토리 생성 실패:", err);
     }
   }
-  // fs.mkdirSync(outputDir, { recursive: true });
   const jacocoPath = path.join(extensionPath, "resources", "jacocoagent.jar");
   const rulesPath = path.join(extensionPath, "resources", "npe-rules.pl");
 
@@ -96,16 +94,14 @@ export function generateConfigurationArgs(
 
   const normalizedProps: Record<string, any> = {};
 
-  // 객체의 각 key-value를 순회하면서 값만 normalize
   for (const [key, value] of Object.entries(props)) {
     if (typeof value === "string") {
       normalizedProps[key] = value.replace(/\r/g, "").replace(/\n/g, "").trim();
     } else {
-      normalizedProps[key] = value; // 문자열이 아니면 그대로
+      normalizedProps[key] = value;
     }
   }
 
-  // 아직 \r가 남아있는지 체크
   if (
     Object.values(normalizedProps).some(
       (v) => typeof v === "string" && v.includes("\r")

@@ -13,14 +13,18 @@ export function runTest(
     const extensionPath = context.extensionPath;
     const baseDir = workspacePath;
 
+    const settings = vscode.workspace.getConfiguration("logicfl");
+    const userClassPaths = settings.get<string[]>("classPaths", [
+      "build/classes/java/main",
+      "build/classes/java/test",
+      "build/libs/*",
+    ]);
+
     const jarPath = [
-      path.join(baseDir, "build", "classes", "java", "main"),
-      path.join(baseDir, "build", "classes", "java", "test"),
-      path.join(baseDir, "build", "libs", "*"),
+      ...userClassPaths.map((p) => path.join(baseDir, p)),
       path.join(extensionPath, "logic-fl", "build", "classes", "java", "main"),
       path.join(extensionPath, "logic-fl", "build", "libs", "*"),
     ].join(path.delimiter);
-    // junit5-test-runner.java 가 있는 곳이랑 test resources 가 있는 곳이 다름
 
     const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
     const classNameTag = fqcn.split(".").pop()?.replace(/Test$/i, "") ?? fqcn;
@@ -31,13 +35,11 @@ export function runTest(
       `config.${classNameTag}.properties`
     );
 
-    const settings = vscode.workspace.getConfiguration("logicfl");
     const junitVersion = settings.get("junitVersion", "junit5");
     const junitRunner =
       junitVersion === "junit5"
         ? "logicfl.coverage.JUnit5TestRunner"
         : "logicfl.coverage.JUnit4TestRunner";
-    console.log("configJson:", configJson);
     const javaArgs = ["-cp", jarPath, junitRunner, configJson];
 
     const child = cp.spawn("java", javaArgs, {
@@ -54,7 +56,7 @@ export function runTest(
         resolve(stdout);
       } else {
         reject(
-          `실행 실패 (code ${code}):  [stdout] ${stdout} [stderr] ${stderr}`
+          `테스트 정보 가져오기 실패, Class Paths를 다시 한번 확인해주세요. ${jarPath}`
         );
       }
     });
