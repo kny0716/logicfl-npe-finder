@@ -38,6 +38,13 @@ export function showPropagationGraph(
   );
 
   const graphData = buildPropagationGraph(testItem, context);
+
+  if (!graphData || graphData.nodes.length === 0) {
+    vscode.window.showErrorMessage(
+      "전파 그래프 생성에 오류가 발생했습니다. 다시 시도해주세요."
+    );
+    return;
+  }
   panel.webview.html = getWebviewContent(panel.webview, context);
 
   panel.webview.onDidReceiveMessage(

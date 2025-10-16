@@ -141,6 +141,42 @@ function checkProjectBuilt(): { isBuilt: boolean; checkedPath: string | null } {
   }
 }
 
+async function checkPrefixCheck(testItem: LogicFLItem): Promise<boolean> {
+  const settings = vscode.workspace.getConfiguration("logicfl");
+  const targetPrefix = settings.get<string>("targetPrefix");
+
+  if (!targetPrefix || targetPrefix.trim() === "") {
+    vscode.window.showErrorMessage(
+      "logicfl.targetPrefix 설정이 누락되었습니다. settings.json 파일에서 분석할 소스코드의 패키지 경로를 지정해주세요."
+    );
+    return false;
+  }
+
+  const document = await openJavaFile(testItem);
+  if (!document) {
+    return false;
+  }
+
+  const fileContent = document.getText();
+  const packageMatch = fileContent.match(/^\s*package\s+([a-zA-Z0-9_.]+);/m);
+
+  if (!packageMatch || packageMatch.length < 2) {
+    vscode.window.showWarningMessage(
+      `'${path.basename(
+        document.uri.fsPath
+      )}' 파일에서 패키지 선언을 찾을 수 없습니다`
+    );
+    return false;
+  } else {
+    const actualPackage = packageMatch[1];
+    if (actualPackage !== targetPrefix) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   const controller = vscode.tests.createTestController(
     "logicfl",
@@ -223,7 +259,15 @@ export async function activate(context: vscode.ExtensionContext) {
       const buildCheck = checkProjectBuilt();
       if (!buildCheck.isBuilt) {
         vscode.window.showErrorMessage(
-          `프로젝트가 빌드되지 않은 것 같습니다. 경로를 찾을 수 없습니다: ${buildCheck.checkedPath}\n프로젝트를 먼저 빌드한 후 다시 시도해주세요.`
+          `프로젝트가 빌드되었는지, logicfl.classPaths 설정이 올바른지 확인하시고 다시 시도해주세요: ${buildCheck.checkedPath}`
+        );
+        return;
+      }
+
+      const isPrefixValid = await checkPrefixCheck(testItem);
+      if (!isPrefixValid) {
+        vscode.window.showErrorMessage(
+          "패키지 경로 설정 오류로 인해 분석을 진행할 수 없습니다. logicfl.targetPrefix 설정을 확인해주세요."
         );
         return;
       }

@@ -34,12 +34,17 @@ interface CodeInfo {
 }
 
 function mapIdToName(id: string, facts: string): string | null {
-  // literal
   if (id.includes("literal")) {
+    const literalRegex = new RegExp(
+      `literal\\(${id},[^,]+,range\\([^)]*\\),([^)]+)\\)`
+    );
+    const m = facts.match(literalRegex);
+    if (m) {
+      return m[1].trim().replace(/'/g, "");
+    }
     return "null";
   }
 
-  // name(...)
   const nameRegex = new RegExp(
     `name\\(${id}, [^,]+, [^,]+, [^,]+, range\\([^)]*\\), '([^']+)'\\)`
   );
@@ -48,7 +53,6 @@ function mapIdToName(id: string, facts: string): string | null {
     return m1[1];
   }
 
-  // expr(...)
   const exprRegex = new RegExp(
     `expr\\(${id}, [^,]+, [^,]+, [^,]+, range\\([^)]*\\), "([^"]+)"\\)`
   );
@@ -108,6 +112,28 @@ export function buildPropagationGraph(
 
   const logicContent = fs.readFileSync(logicFlPath, "utf-8");
   const codeFactsContent = fs.readFileSync(codeFactsPath, "utf-8");
+
+  const methodInvocations = new Map<string, string>();
+  for (const m of logicContent.matchAll(
+    /method_invoc\(([^,]+),\s*([^,]+),\s*line\([^,]+,\s*\d+\)\)/g
+  )) {
+    const [_, invocId, methodId] = m;
+    methodInvocations.set(invocId, methodId);
+  }
+
+  const returnsByMethod = new Map<
+    string,
+    Array<{ src: string; line: number }>
+  >();
+  for (const m of logicContent.matchAll(
+    /return\(([^,]+),\s*([^,]+),\s*line\([^,]+,\s*(\d+)\)\)/g
+  )) {
+    const [_, src, methodId, lineStr] = m;
+    if (!returnsByMethod.has(methodId)) {
+      returnsByMethod.set(methodId, []);
+    }
+    returnsByMethod.get(methodId)!.push({ src, line: parseInt(lineStr, 10) });
+  }
 
   const assignsByDst = new Map<string, Array<{ src: string; line: number }>>();
   for (const m of logicContent.matchAll(
@@ -208,8 +234,10 @@ export function buildPropagationGraph(
     }
     visited.add(currentKey);
 
+    let foundPredecessor = false;
+
     const allAssigns = assignsByDst.get(id) || [];
-    const relevantAssigns = allAssigns.filter((as) => as.line < line);
+    const relevantAssigns = allAssigns.filter((as) => as.line <= line);
 
     if (relevantAssigns.length > 0) {
       const predecessor = relevantAssigns.reduce((latest, current) =>
@@ -225,6 +253,24 @@ export function buildPropagationGraph(
 
       if (!visited.has(predecessorKey)) {
         traceQueue.push({ id: predecessor.src, line: predecessor.line });
+      }
+      foundPredecessor = true;
+    }
+    if (!foundPredecessor && methodInvocations.has(id)) {
+      const methodId = methodInvocations.get(id)!;
+      const returns = returnsByMethod.get(methodId) || [];
+
+      for (const ret of returns) {
+        const predecessorKey = addNode(ret.src, ret.line);
+        edges.push({
+          from: predecessorKey,
+          to: currentKey,
+          arrows: "to",
+        });
+
+        if (!visited.has(predecessorKey)) {
+          traceQueue.push({ id: ret.src, line: ret.line });
+        }
       }
     }
   }

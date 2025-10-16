@@ -2,6 +2,7 @@ import * as cp from "child_process";
 import * as path from "path";
 import * as vscode from "vscode";
 import { LogicFLItem } from "./models/logicFLItem";
+import * as fs from "fs";
 
 export function runTest(
   testItem: LogicFLItem,
@@ -14,11 +15,32 @@ export function runTest(
     const baseDir = workspacePath;
 
     const settings = vscode.workspace.getConfiguration("logicfl");
-    const userClassPaths = settings.get<string[]>("classPaths", [
-      "build/classes/java/main",
-      "build/classes/java/test",
-      "build/libs/*",
-    ]);
+    let userClassPaths = settings.get<string[]>("classPaths");
+
+    if (!userClassPaths || userClassPaths.length === 0) {
+      console.log("userclasspath is empty");
+      const isMaven = fs.existsSync(path.join(workspacePath, "pom.xml"));
+      const isGradle = fs.existsSync(path.join(workspacePath, "build.gradle"));
+
+      if (isMaven) {
+        console.log("Maven project detected. Using default Maven class paths.");
+        userClassPaths = ["target/classes", "target/test-classes"];
+      } else if (isGradle) {
+        console.log(
+          "Gradle project detected. Using default Gradle class paths."
+        );
+        userClassPaths = [
+          "build/classes/java/main",
+          "build/classes/java/test",
+          "build/libs/*",
+        ];
+      } else {
+        console.log(
+          "Simple project detected. Using workspace root as class path."
+        );
+        userClassPaths = ["."];
+      }
+    }
 
     const jarPath = [
       ...userClassPaths.map((p) => path.join(baseDir, p)),
