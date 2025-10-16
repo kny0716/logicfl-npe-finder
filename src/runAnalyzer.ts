@@ -77,6 +77,7 @@ export function runAnalyzer(
         resolve();
         console.log(`${analyzerName} 실행 완료 resolve`);
       } else {
+        testItem.setOriginalIcon();
         const msg = `${analyzerName} 비정상 종료 (코드 ${code})`;
         vscode.window.showErrorMessage(msg);
         reject(new Error(msg));

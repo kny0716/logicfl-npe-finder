@@ -18,12 +18,27 @@ export function generateConfig(
   const baseDir = workspacePath;
   const extensionPath = context.extensionPath;
 
-  const userClassPaths = settings.get<string[]>("classPaths", [
-    "build/classes/java/main",
-    "build/classes/java/test",
-    "build/libs/*",
-  ]);
+  let userClassPaths = settings.get<string[]>("classPaths");
 
+  if (!userClassPaths || userClassPaths.length === 0) {
+    const isMaven = fs.existsSync(path.join(workspacePath, "pom.xml"));
+    const isGradle = fs.existsSync(path.join(workspacePath, "build.gradle"));
+
+    if (isMaven) {
+      userClassPaths = ["target/classes", "target/test-classes"];
+    } else if (isGradle) {
+      userClassPaths = [
+        "build/classes/java/main",
+        "build/classes/java/test",
+        "build/libs/*",
+      ];
+    } else {
+      console.log(
+        "Simple project detected. Using workspace root as class path."
+      );
+      userClassPaths = ["."];
+    }
+  }
   const classPathStr = [
     ...userClassPaths.map((p) => path.join(baseDir, p)),
     path.join(extensionPath, "logic-fl", "build", "classes", "java", "main"),
