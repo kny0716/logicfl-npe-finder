@@ -206,7 +206,7 @@ async function checkTargetPrefix(testItem: LogicFLItem): Promise<boolean> {
 
 async function checkJunitVersion(testItem: LogicFLItem): Promise<boolean> {
   const settings = vscode.workspace.getConfiguration("logicfl");
-  const configuredVersion = settings.get<string>("junit.version", "junit4"); // 기본값을 'junit4'로 설정
+  const configuredVersion = settings.get<string>("junitVersion", "junit5");
 
   const document = await openTestFile(testItem);
   if (!document) {
@@ -227,14 +227,20 @@ async function checkJunitVersion(testItem: LogicFLItem): Promise<boolean> {
   }
 
   if (detectedVersion !== "unknown" && configuredVersion !== detectedVersion) {
+    vscode.window.showErrorMessage(
+      `JUnit 버전 불일치: 설정된 버전은 '${configuredVersion}'이지만, 테스트 파일은 JUnit ${detectedVersion.replace(
+        "junit",
+        ""
+      )}을 사용합니다. 'logicfl.junit.version' 설정을 수정해주세요.`
+    );
     return false;
   }
 
   if (detectedVersion === "unknown") {
     vscode.window.showWarningMessage(
-      "파일에서 JUnit import를 찾을 수 없습니다."
+      "파일에서 JUnit import를 찾을 수 없어 버전 검사를 건너뜁니다."
     );
-    return false;
+    return true;
   }
 
   return true;
