@@ -13,3 +13,6 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 logic-fl/src/**
+
+logic-fl/
+!logic-fl/build/libs
