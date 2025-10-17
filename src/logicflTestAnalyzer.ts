@@ -62,8 +62,18 @@ async function runGradleTestOnly(
   target: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const gradleCmd =
-      process.platform === "win32" ? "gradlew.bat" : "./gradlew";
+    const isWindows = process.platform === "win32";
+    const gradleCmd = isWindows ? "gradlew.bat" : "./gradlew";
+    const gradlePath = path.join(workspacePath, gradleCmd);
+
+    if (!isWindows) {
+      try {
+        fs.accessSync(gradlePath, fs.constants.X_OK);
+      } catch (err) {
+        vscode.window.showErrorMessage("Gradle 실행 권한이 없습니다. 권한 설정 후 다시 시도해주세요.");
+        return reject(new Error("Gradle 실행 권한이 없습니다. 권한 설정 후 다시 시도해주세요."));
+      }
+    }
     const args = ["test", "--tests", target];
 
     const proc = cp.spawn(gradleCmd, args, {
