@@ -79,6 +79,33 @@ async function openJavaFile(
   }
 }
 
+async function openTestFile(
+  testItem: LogicFLItem
+): Promise<vscode.TextDocument | undefined> {
+  const fqcn = testItem.id!.split("@").pop()?.split("#")[0] ?? "UnknownTest";
+  const parts = fqcn.split(".");
+  const testName = parts.pop()!;
+
+  const testSourcePath = "src/test/java";
+  const testSourcePathParts = testSourcePath.split(/[/\\]/);
+
+  const filePath = path.join(
+    vscode.workspace.workspaceFolders?.[0].uri.fsPath!,
+    ...testSourcePathParts,
+    ...parts,
+    testName + ".java"
+  );
+
+  if (fs.existsSync(filePath)) {
+    const document = await vscode.workspace.openTextDocument(filePath);
+    await vscode.window.showTextDocument(document);
+    return document;
+  } else {
+    vscode.window.showErrorMessage(`파일을 찾을 수 없습니다: ${filePath} `);
+    return undefined;
+  }
+}
+
 function checkPrologInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
     exec("swipl --version", (error, stdout, stderr) => {
@@ -141,7 +168,7 @@ function checkProjectBuilt(): { isBuilt: boolean; checkedPath: string | null } {
   }
 }
 
-async function checkPrefixCheck(testItem: LogicFLItem): Promise<boolean> {
+async function checkTargetPrefix(testItem: LogicFLItem): Promise<boolean> {
   const settings = vscode.workspace.getConfiguration("logicfl");
   const targetPrefix = settings.get<string>("targetPrefix");
 
@@ -172,6 +199,42 @@ async function checkPrefixCheck(testItem: LogicFLItem): Promise<boolean> {
     if (actualPackage !== targetPrefix) {
       return false;
     }
+  }
+
+  return true;
+}
+
+async function checkJunitVersion(testItem: LogicFLItem): Promise<boolean> {
+  const settings = vscode.workspace.getConfiguration("logicfl");
+  const configuredVersion = settings.get<string>("junit.version", "junit4"); // 기본값을 'junit4'로 설정
+
+  const document = await openTestFile(testItem);
+  if (!document) {
+    return false;
+  }
+
+  const fileContent = document.getText();
+
+  const usesJunit5 = /import\s+org\.junit\.jupiter\.api\./m.test(fileContent);
+  const usesJunit4 = /import\s+org\.junit\.Test;/m.test(fileContent);
+
+  let detectedVersion: "junit5" | "junit4" | "unknown" = "unknown";
+
+  if (usesJunit5) {
+    detectedVersion = "junit5";
+  } else if (usesJunit4) {
+    detectedVersion = "junit4";
+  }
+
+  if (detectedVersion !== "unknown" && configuredVersion !== detectedVersion) {
+    return false;
+  }
+
+  if (detectedVersion === "unknown") {
+    vscode.window.showWarningMessage(
+      "파일에서 JUnit import를 찾을 수 없습니다."
+    );
+    return false;
   }
 
   return true;
@@ -264,10 +327,17 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const isPrefixValid = await checkPrefixCheck(testItem);
+      const isPrefixValid = await checkTargetPrefix(testItem);
       if (!isPrefixValid) {
         vscode.window.showErrorMessage(
           "패키지 경로 설정 오류로 인해 분석을 진행할 수 없습니다. logicfl.targetPrefix 설정을 확인해주세요."
+        );
+        return;
+      }
+      const isJunitVersionValid = await checkJunitVersion(testItem);
+      if (!isJunitVersionValid) {
+        vscode.window.showErrorMessage(
+          "JUnit 버전 불일치로 인해 분석을 진행할 수 없습니다. logicfl.junit.version 설정을 확인해주세요."
         );
         return;
       }
