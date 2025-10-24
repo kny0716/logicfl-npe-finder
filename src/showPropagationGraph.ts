@@ -143,7 +143,7 @@ function getWebviewContent(
                     font: { multi: 'html' } ,
                 },
                 physics: { enabled: false },
-                interaction: { dragNodes: true, dragView: false, zoomView: true, hover: true  }
+                interaction: { dragNodes: true, dragView: true, zoomView: true, hover: true  }
             };
 
             const network = new vis.Network(container, data, options);

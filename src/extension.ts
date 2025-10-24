@@ -319,8 +319,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
       const isJdkInstalled = await checkJdkInstalled();
       if (!isJdkInstalled) {
-        vscode.window.showErrorMessage(
-          "Java(JDK)를 찾을 수 없습니다. JDK를 설치하거나 VS Code 설정에서 'logicfl.jvmPath'를 올바르게 지정해주세요."
+        vscode.window.showWarningMessage(
+          "Java(JDK)를 찾을 수 없습니다. JDK를 설치하거나 VS Code 설정에서 'logicfl.jvmPath'를 올바르게 지정한 후 다시 시도해주세요."
         );
         return;
       }
@@ -328,7 +328,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const buildCheck = checkProjectBuilt();
       if (!buildCheck.isBuilt) {
         vscode.window.showErrorMessage(
-          `프로젝트가 빌드되었는지, logicfl.classPaths 설정이 올바른지 확인하시고 다시 시도해주세요: ${buildCheck.checkedPath}`
+          `프로젝트가 빌드되었는지, logicfl.classPaths 설정이 올바른지 확인한 후 다시 시도해주세요: ${buildCheck.checkedPath}`
         );
         return;
       }
