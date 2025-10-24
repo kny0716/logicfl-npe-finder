@@ -34,7 +34,7 @@
 미설치시 다음과 같은 오류 메시지가 뜹니다. 프로그램들을 설치하고 다시 실행하시기 바랍니다.
 
 ![JDK 미설치](./images/jdkuninstall.png)
-![SWI-Prolog 미설치](./images/swipuninstall.png)
+![SWI-Prolog 미설치](./images/swipluninstall.png)
 
 ## ⚙️ 확장 프로그램 설정 (Extension Settings)
 
