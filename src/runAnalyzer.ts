@@ -53,7 +53,7 @@ export function runAnalyzer(
     });
 
     const outputChannel = vscode.window.createOutputChannel(analyzerName);
-    outputChannel.show(true);
+    outputChannel.show(false);
 
     child.stdout.on("data", (data) => {
       outputChannel.append(data.toString());
