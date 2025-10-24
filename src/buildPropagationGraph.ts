@@ -146,6 +146,41 @@ export function buildPropagationGraph(
     assignsByDst.get(dst)!.push({ src, line: parseInt(lineStr, 10) });
   }
 
+  const paramInfoMap = new Map<string, { methodId: string; index: number }>();
+  for (const m of logicContent.matchAll(
+    /param\(([^,]+),\s*(\d+),\s*([^)]+)\)/g
+  )) {
+    const [_, paramId, indexStr, methodId] = m;
+    paramInfoMap.set(paramId, { methodId, index: parseInt(indexStr, 10) });
+  }
+
+  const argumentMap = new Map<string, Map<number, string>>();
+  for (const m of logicContent.matchAll(
+    /argument\(([^,]+),\s*(\d+),\s*([^)]+)\)/g
+  )) {
+    const [_, argId, indexStr, invocId] = m;
+    if (!argumentMap.has(invocId)) {
+      argumentMap.set(invocId, new Map<number, string>());
+    }
+    argumentMap.get(invocId)!.set(parseInt(indexStr, 10), argId);
+  }
+
+  const invocationsByMethodId = new Map<
+    string,
+    Array<{ invocId: string; line: number }>
+  >();
+  for (const m of logicContent.matchAll(
+    /method_invoc\(([^,]+),\s*([^,]+),\s*line\([^,]+,\s*(\d+)\)\)/g
+  )) {
+    const [_, invocId, methodId, lineStr] = m;
+    if (!invocationsByMethodId.has(methodId)) {
+      invocationsByMethodId.set(methodId, []);
+    }
+    invocationsByMethodId
+      .get(methodId)!
+      .push({ invocId, line: parseInt(lineStr, 10) });
+  }
+
   const codeInfoMap = new Map<string, CodeInfo>();
 
   for (const m of codeFactsContent.matchAll(
@@ -256,6 +291,34 @@ export function buildPropagationGraph(
       }
       foundPredecessor = true;
     }
+
+    if (paramInfoMap.has(id)) {
+      const { methodId, index } = paramInfoMap.get(id)!;
+      const invocations = invocationsByMethodId.get(methodId) || [];
+
+      for (const invoc of invocations) {
+        if (invoc.line > line) {
+          continue;
+        }
+
+        const args = argumentMap.get(invoc.invocId);
+        if (args && args.has(index)) {
+          const argId = args.get(index)!;
+          const predecessorKey = addNode(argId, invoc.line);
+          edges.push({
+            from: predecessorKey,
+            to: currentKey,
+            arrows: "to",
+          });
+
+          if (!visited.has(predecessorKey)) {
+            traceQueue.push({ id: argId, line: invoc.line });
+          }
+          foundPredecessor = true;
+        }
+      }
+    }
+
     if (!foundPredecessor && methodInvocations.has(id)) {
       const methodId = methodInvocations.get(id)!;
       const returns = returnsByMethod.get(methodId) || [];
