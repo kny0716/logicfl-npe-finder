@@ -40,6 +40,8 @@
 
 `File > Preferences > Settings` (단축키: `Ctrl + ,`) 에서 `logicfl`을 검색하여 분석 옵션을 상세하게 설정할 수 있습니다.
 
+![설정화면](./images/logicflsettings.png)
+
 ℹ️ Note: 이 확장 프로그램의 기본 설정은 Gradle 프로젝트에 최적화되어 있습니다. Maven 프로젝트에서 별도의 설정 없이 자동으로 감지되어 동작하지만, logicfl.classPaths 설정을 한 번 확인해보는 것을 권장합니다.
 
 | 설정 (Setting)              | 설명 (Description)                                                                                                                | 기본값 (Default)                   |
@@ -55,4 +57,4 @@
 | **`logicfl.classPaths`**    | 컴파일된 `.class` 파일과 라이브러리를 포함한 프로젝트의 클래스패스 상대 경로 배열을 지정합니다.                                   | `["build/classes/java/main", ...]` |
 | **`logicfl.jvmPath`**       | 사용할 Java(JVM) 실행 파일의 절대 경로를 지정합니다. 비워두면 시스템 기본값을 사용합니다.                                         | `""`                               |
 
-![설정화면](./images/logicflsettings.png)
+
