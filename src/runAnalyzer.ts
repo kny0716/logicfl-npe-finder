@@ -52,16 +52,16 @@ export function runAnalyzer(
       shell: false,
     });
 
-    const outputChannel = vscode.window.createOutputChannel(analyzerName);
-    outputChannel.show(false);
+    // const outputChannel = vscode.window.createOutputChannel(analyzerName);
+    // outputChannel.show(true);
 
-    child.stdout.on("data", (data) => {
-      outputChannel.append(data.toString());
-    });
+    // child.stdout.on("data", (data) => {
+    //   outputChannel.append(data.toString());
+    // });
 
-    child.stderr.on("data", (data) => {
-      outputChannel.append(`[stderr] ${data}`);
-    });
+    // child.stderr.on("data", (data) => {
+    //   outputChannel.append(`[stderr] ${data}`);
+    // });
 
     child.on("error", (err) => {
       vscode.window.showErrorMessage(
